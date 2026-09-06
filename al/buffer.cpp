@@ -1556,8 +1556,8 @@ try {
     if(!buffers)
         context->throw_error(AL_INVALID_VALUE, "Null AL buffers");
 
-    auto const device = al::get_not_null(context->mALDevice);
-    auto const devlock = std::lock_guard{device->BufferLock};
+    auto &device = *context->mALDevice;
+    auto const devlock = std::lock_guard{device.BufferLock};
 
     /* Special-case setting a single buffer, to avoid extraneous allocations. */
     if(n == 1)
@@ -1575,15 +1575,15 @@ try {
         if(*storage == EaxStorage::Hardware)
         {
             if(!buffer->mEaxXRamIsHardware
-                && buffer->mOriginalSize > device->eax_x_ram_free_size)
+                && buffer->mOriginalSize > device.eax_x_ram_free_size)
                 context->throw_error(AL_OUT_OF_MEMORY,
                     "Out of X-RAM memory (need: {}, avail: {})", buffer->mOriginalSize,
-                    device->eax_x_ram_free_size);
+                    device.eax_x_ram_free_size);
 
-            eax_x_ram_apply(*device, *buffer);
+            eax_x_ram_apply(device, *buffer);
         }
         else
-            eax_x_ram_clear(*device, *buffer);
+            eax_x_ram_clear(device, *buffer);
         buffer->mEaxXRamMode = *storage;
         return AL_TRUE;
     }
@@ -1618,19 +1618,19 @@ try {
                 total_needed += buffer->mOriginalSize;
             }
         }
-        if(total_needed > device->eax_x_ram_free_size)
+        if(total_needed > device.eax_x_ram_free_size)
             context->throw_error(AL_OUT_OF_MEMORY, "Out of X-RAM memory (need: {}, avail: {})",
-                total_needed, device->eax_x_ram_free_size);
+                total_needed, device.eax_x_ram_free_size);
     }
 
     /* Update the mode. */
-    for(auto const buffer : buflist)
+    for(auto &buffer : buflist | std::views::transform(al::dereference{}))
     {
         if(*storage == EaxStorage::Hardware)
-            eax_x_ram_apply(*device, *buffer);
+            eax_x_ram_apply(device, buffer);
         else
-            eax_x_ram_clear(*device, *buffer);
-        buffer->mEaxXRamMode = *storage;
+            eax_x_ram_clear(device, buffer);
+        buffer.mEaxXRamMode = *storage;
     }
 
     return AL_TRUE;

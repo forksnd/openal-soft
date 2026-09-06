@@ -38,6 +38,7 @@
 #include <new>
 #include <numeric>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -2570,12 +2571,12 @@ void StartSources(gsl::not_null<al::Context*> const context,
     {
         if(context->mStopVoicesOnDisconnect.load(std::memory_order_acquire))
         {
-            for(const gsl::not_null source : srchandles)
+            for(auto &source : srchandles | std::views::transform(al::dereference{}))
             {
                 /* TODO: Send state change event? */
-                source->mOffset = 0.0;
-                source->mOffsetType = AL_NONE;
-                source->mState = AL_STOPPED;
+                source.mOffset = 0.0;
+                source.mOffsetType = AL_NONE;
+                source.mState = AL_STOPPED;
             }
             return;
         }
