@@ -5,14 +5,12 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <limits>
 #include <numbers>
 #include <ranges>
 #include <span>
 #include <stdexcept>
 #include <vector>
 
-#include "alnumeric.h"
 #include "altypes.hpp"
 #include "bsinc_defs.h"
 #include "gsl/gsl"
@@ -21,6 +19,7 @@
 
 namespace {
 
+namespace ce {
 /* The zero-order modified Bessel function of the first kind, used for the
  * Kaiser window.
  *
@@ -56,6 +55,7 @@ constexpr auto cyl_bessel_i(T nu, U x) -> U
     } while(sum != last_sum);
     return sum.cast_to<U>();
 }
+}
 
 /* This is the normalized cardinal sine (sinc) function.
  *
@@ -87,7 +87,7 @@ constexpr auto Kaiser(f64 const beta, f64 const k, f64 const besseli_0_beta) -> 
 {
     if(!(k >= -1.0 && k <= 1.0))
         return 0.0_f64;
-    return ::cyl_bessel_i(0, beta * sqrt(1.0 - k*k)) / besseli_0_beta;
+    return ce::cyl_bessel_i(0, beta * sqrt(1.0 - k*k)) / besseli_0_beta;
 }
 
 /* Calculates the (normalized frequency) transition width of the Kaiser window.
@@ -127,15 +127,15 @@ struct BSincHeader {
         , scaleLimit{1.0_f64 / maxScale}
     {
         const auto base_a = (order+1.0) / 2.0;
-        for(const auto si : std::views::iota(0u, BSincScaleCount))
+        for(const auto si : std::views::iota(0_uz, BSincScaleCount))
         {
-            const auto scale = lerp(scaleBase, 1.0_f64, f64{si+1u} / f64{BSincScaleCount});
+            const auto scale = lerp(scaleBase, 1.0_f64, f64::from(si+1u)/BSincScaleCount);
             a[si] = std::min(base_a/scale, base_a*maxScale);
             /* std::ceil() isn't constexpr until C++23, this should behave the
              * same.
              */
             auto a_ = a[si].reinterpret_as<u32>();
-            a_ += (a_.cast_to<f64>() != a[si]) ? 1_u32 : 0_u32;
+            a_ += (a_.as<f64>() != a[si]) ? 1_u32 : 0_u32;
             m[si] = a_ * 2_u32;
 
             total_size += 4_usize * BSincPhaseCount * ((m[si]+3_u32) & ~3_u32);
@@ -157,17 +157,31 @@ constexpr auto bsinc48_hdr = BSincHeader{80, 47, 1};
 
 template<const BSincHeader &hdr>
 struct BSincFilterArray {
+    static constexpr auto BSincPointsMax = (hdr.m[0]+3u).c_val & ~3u;
+    static constexpr auto besseli_0_beta = ce::cyl_bessel_i(0, hdr.beta);
+    static_assert(BSincPointsMax <= MaxResamplerPadding, "MaxResamplerPadding is too small");
+
     alignas(16) std::array<float, hdr.total_size.c_val> mTable{};
 
+    /* This could be made constexpr/consteval with constexpr-capable sin and
+     * sqrt functions, which we can suitably make. However, the size of the
+     * filter tables not only requires significantly increasing the constexpr
+     * step limit, compilation takes *minutes*, at least with Clang (GCC just
+     * gives up on it without a reason after about a minute of compiling, only
+     * saying it's not constexpr). Pretty absurd since it's instantaneous at
+     * runtime. Would be better to just compile the darn functions with
+     * optimizations and then execute the compiled code, but we can't easily do
+     * that as a pre-compile step with cross-compiling.
+     *
+     * Avoiding our strict number types and using less accurate math functions
+     * can help a bit, but even ignoring the potential quality issues, the
+     * speed improvement isn't enough to make it viable. I don't know how else
+     * to make this more efficient to make the resamplers constexpr.
+     */
     BSincFilterArray() noexcept
     {
-        static constexpr auto BSincPointsMax = (hdr.m[0]+3u).c_val & ~3u;
-        static_assert(BSincPointsMax <= MaxResamplerPadding, "MaxResamplerPadding is too small");
-
         using filter_type = std::array<std::array<f64, BSincPointsMax>, BSincPhaseCount>;
         auto filter = std::vector<filter_type>(BSincScaleCount);
-
-        static constexpr auto besseli_0_beta = ::cyl_bessel_i(0, hdr.beta);
 
         /* Calculate the Kaiser-windowed Sinc filter coefficients for each
          * scale and phase index.
@@ -176,10 +190,10 @@ struct BSincFilterArray {
         {
             const auto a = hdr.a[si];
             const auto m = hdr.m[si];
-            const auto l = floor(m*0.5_f64) - 1.0_f64;
-            const auto o = size_t{BSincPointsMax-m.c_val} / 2u;
+            const auto l = (m>>1) - 1.0_f64;
+            const auto o = (usize{BSincPointsMax}-m) / 2u;
             const auto scale = lerp(hdr.scaleBase, 1.0_f64,
-                f64::from(si+1u)/f64{BSincScaleCount});
+                f64::from(si+1u)/BSincScaleCount);
 
             /* Calculate an appropriate cutoff frequency. An explanation may be
              * in order here.
@@ -243,12 +257,13 @@ struct BSincFilterArray {
             {
                 const auto phase = l + pi.as<f64>()/BSincPhaseCount;
 
-                for(const auto i : std::views::iota(0_u32, m))
+                std::ranges::transform(std::views::iota(0_u32, m),
+                    std::span{filter[si][pi.c_val]}.subspan(o.c_val).begin(),
+                    [phase, cutoff2, a](u32 const i) noexcept -> f64
                 {
-                    const auto x = i - phase;
-                    filter[si][pi.c_val][o+i.c_val] = Kaiser(hdr.beta, x/a, besseli_0_beta)
-                        * cutoff2 * Sinc(cutoff2*x);
-                }
+                    auto const x = i - phase;
+                    return Kaiser(hdr.beta, x/a, besseli_0_beta) * cutoff2 * Sinc(cutoff2*x);
+                });
             }
         }
 
@@ -256,7 +271,7 @@ struct BSincFilterArray {
         for(const auto si : std::views::iota(0_uz, BSincScaleCount))
         {
             const auto m = (hdr.m[si].c_val+3_uz) & ~3_uz;
-            const auto o = size_t{BSincPointsMax-m} / 2u;
+            const auto o = std::size_t{BSincPointsMax-m} / 2u;
 
             /* Write out each phase index's filter and phase delta for this
              * quality scale.
@@ -318,8 +333,8 @@ struct BSincFilterArray {
                     }
                     else
                     {
-                        mTable[idx++] = ((0.0 - filter[si+1][pi][o]) - (0.0 - filter[si][pi][o]))
-                            .template cast_to<f32>().c_val;
+                        mTable[idx++] = f64{(0.0-filter[si+1][pi][o]) - (0.0-filter[si][pi][o])}
+                            .cast_to<f32>().c_val;
                         for(const auto i : std::views::iota(1_uz, m))
                         {
                             const auto spDelta = (filter[si+1][0][o+i-1] - filter[si+1][pi][o+i]) -
