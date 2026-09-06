@@ -117,12 +117,12 @@ template<std::ranges::contiguous_range S1, std::ranges::contiguous_range ...Args
         + 3*sizeof...(Args) + 5;
     auto arr = std::array<char, tmplen>{};
     auto oiter = std::ranges::copy("[\""sv, arr.begin()).out;
+
     oiter = std::ranges::copy(detail_::get_strview(std::forward<S1>(s1)), oiter).out;
-    auto do_concat = [sep=R"(",")"sv, &oiter](std::string_view const str)
-    {
-        oiter = std::ranges::copy(std::array{sep, str} | std::views::join, oiter).out;
-    };
+    auto do_concat [[maybe_unused]] = [sep=R"(",")"sv, &oiter](std::string_view const str)
+    { oiter = std::ranges::copy(std::array{sep, str} | std::views::join, oiter).out; };
     (..., do_concat(detail_::get_strview(std::forward<Args>(more))));
+
     std::ranges::copy("\"]"sv, oiter);
     return arr;
 }
