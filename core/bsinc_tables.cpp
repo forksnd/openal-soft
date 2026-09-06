@@ -1,5 +1,5 @@
 
-#include "bsinc_tables.h"
+#include "bsinc_tables.hpp"
 
 #include <algorithm>
 #include <array>

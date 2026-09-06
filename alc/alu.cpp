@@ -49,7 +49,7 @@
 #include "core/bformatdec.h"
 #include "core/bs2b.h"
 #include "core/bsinc_defs.h"
-#include "core/bsinc_tables.h"
+#include "core/bsinc_tables.hpp"
 #include "core/bufferline.h"
 #include "core/buffer_storage.h"
 #include "core/context.h"

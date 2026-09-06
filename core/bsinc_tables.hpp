@@ -1,5 +1,5 @@
-#ifndef CORE_BSINC_TABLES_H
-#define CORE_BSINC_TABLES_H
+#ifndef CORE_BSINC_TABLES_HPP
+#define CORE_BSINC_TABLES_HPP
 
 #include <array>
 #include <span>
@@ -19,4 +19,4 @@ DECL_HIDDEN extern constinit const BSincTable gBSinc12;
 DECL_HIDDEN extern constinit const BSincTable gBSinc24;
 DECL_HIDDEN extern constinit const BSincTable gBSinc48;
 
-#endif /* CORE_BSINC_TABLES_H */
+#endif /* CORE_BSINC_TABLES_HPP */

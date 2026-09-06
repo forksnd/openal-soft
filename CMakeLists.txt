@@ -825,7 +825,7 @@ set(CORE_HDRS
     core/bformatdec.h
     core/bs2b.h
     core/bsinc_defs.h
-    core/bsinc_tables.h
+    core/bsinc_tables.hpp
     core/bufferline.h
     core/buffer_storage.h
     core/context.h
