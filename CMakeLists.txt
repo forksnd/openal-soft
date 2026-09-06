@@ -792,7 +792,6 @@ set(CORE_SRCS
     core/ambidefs.cpp
     core/bformatdec.cpp
     core/bs2b.cpp
-    core/bsinc_tables.cpp
     core/context.cpp
     core/converter.cpp
     core/cpu_caps.cpp
@@ -860,6 +859,7 @@ set(CORE_HDRS
     core/voice_change.h)
 if(HAVE_CXXMODULES)
     list(APPEND CORE_MODS
+        core/bsinc_tables.cppm
         core/cubic_tables.cppm
         core/logging.cppm)
 else()

@@ -49,7 +49,6 @@
 #include "core/bformatdec.h"
 #include "core/bs2b.h"
 #include "core/bsinc_defs.h"
-#include "core/bsinc_tables.hpp"
 #include "core/bufferline.h"
 #include "core/buffer_storage.h"
 #include "core/context.h"
@@ -80,8 +79,10 @@
 #include "vecmat.h"
 
 #if HAVE_CXXMODULES
+import bsinc_tables;
 import cubic_tables;
 #else
+#include "core/bsinc_tables.hpp"
 #include "core/cubic_tables.hpp"
 #endif
 
