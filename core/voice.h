@@ -20,7 +20,7 @@
 #include "filters/splitter.h"
 #include "mixer/defs.h"
 #include "mixer/hrtfdefs.h"
-#include "resampler_limits.h"
+#include "resampler_limits.hpp"
 #include "vector.h"
 
 struct ContextBase;

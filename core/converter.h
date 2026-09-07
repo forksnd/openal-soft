@@ -10,7 +10,7 @@
 #include "devformat.h"
 #include "flexarray.h"
 #include "mixer/defs.h"
-#include "resampler_limits.h"
+#include "resampler_limits.hpp"
 
 
 class SampleConverter {

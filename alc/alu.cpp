@@ -65,7 +65,7 @@
 #include "core/mixer.h"
 #include "core/mixer/defs.h"
 #include "core/mixer/hrtfdefs.h"
-#include "core/resampler_limits.h"
+#include "core/resampler_limits.hpp"
 #include "core/storage_formats.h"
 #include "core/uhjfilter.h"
 #include "core/voice.h"

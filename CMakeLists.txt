@@ -851,7 +851,7 @@ set(CORE_HDRS
     core/hrtf_resource.hpp
     core/mastering.h
     core/mixer.h
-    core/resampler_limits.h
+    core/resampler_limits.hpp
     core/storage_formats.h
     core/tsmefilter.hpp
     core/uhjfilter.h

@@ -35,9 +35,8 @@
 #include "mixer/defs.h"
 #include "mixer/hrtfdefs.h"
 #include "opthelpers.h"
-#include "resampler_limits.h"
+#include "resampler_limits.hpp"
 #include "ringbuffer.h"
-#include "tsmefilter.hpp"
 #include "uhjfilter.h"
 
 #if HAVE_CXXMODULES

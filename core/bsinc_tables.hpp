@@ -12,7 +12,7 @@
 #include "altypes.hpp"
 #include "bsinc_defs.h"
 #include "gsl/gsl"
-#include "resampler_limits.h"
+#include "resampler_limits.hpp"
 
 
 namespace ce {

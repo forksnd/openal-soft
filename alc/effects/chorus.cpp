@@ -41,7 +41,7 @@
 #include "core/effectslot.h"
 #include "core/mixer.h"
 #include "core/mixer/defs.h"
-#include "core/resampler_limits.h"
+#include "core/resampler_limits.hpp"
 #include "intrusive_ptr.h"
 #include "opthelpers.h"
 

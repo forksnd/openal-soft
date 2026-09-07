@@ -27,7 +27,7 @@
 #include "gsl/gsl"
 #include "intrusive_ptr.h"
 #include "mixer/hrtfdefs.h"
-#include "resampler_limits.h"
+#include "resampler_limits.hpp"
 #include "vector.h"
 
 class BFormatDec;

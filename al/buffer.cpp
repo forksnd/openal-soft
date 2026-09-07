@@ -50,7 +50,7 @@
 #include "alnumeric.h"
 #include "core/device.h"
 #include "core/except.h"
-#include "core/resampler_limits.h"
+#include "core/resampler_limits.hpp"
 #include "core/voice.h"
 #include "direct_defs.h"
 #include "intrusive_ptr.h"
