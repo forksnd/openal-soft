@@ -168,20 +168,15 @@ constexpr auto HasDBus() noexcept -> bool { return true; }
 
 namespace {
 
-class dbusError {
-    DBusError mError{};
-
+class dbusError : public DBusError {
 public:
-    dbusError() { dbus_error_init(&mError); }
+    dbusError() : DBusError{} { dbus_error_init(this); }
     dbusError(dbusError const&) = delete;
     dbusError(dbusError&&) = delete;
-    ~dbusError() { dbus_error_free(&mError); }
+    ~dbusError() { dbus_error_free(this); }
 
     void operator=(dbusError const&) = delete;
     void operator=(dbusError&&) = delete;
-
-    auto operator->() noexcept -> DBusError* { return &mError; }
-    auto get() noexcept -> DBusError& { return mError; }
 };
 
 constexpr auto dbusTypeString = int{'s'};
@@ -238,11 +233,11 @@ auto rtkit_get_int_property(DBusConnection *const connection, gsl::czstring cons
 
     auto error = dbusError{};
     auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(connection,
-        std::to_address(m), -1, &error.get())};
-    if(!r) return translate_error(error->name);
+        std::to_address(m), -1, &error)};
+    if(!r) return translate_error(error.name);
 
-    if(dbus_set_error_from_message(&error.get(), std::to_address(r)))
-        return translate_error(error->name);
+    if(dbus_set_error_from_message(&error, std::to_address(r)))
+        return translate_error(error.name);
 
     auto ret = -EBADMSG;
     auto iter = DBusMessageIter{};
@@ -296,10 +291,10 @@ auto rtkit_get_dbus_connection() -> dbusConnectionPtr
         return {};
     }
     auto error = dbusError{};
-    auto conn = dbusConnectionPtr{dbus_bus_get(DBUS_BUS_SYSTEM, &error.get())};
+    auto conn = dbusConnectionPtr{dbus_bus_get(DBUS_BUS_SYSTEM, &error)};
     if(!conn)
     {
-        WARN("D-Bus connection failed with {}: {}", error->name, error->message);
+        WARN("D-Bus connection failed with {}: {}", error.name, error.message);
         return {};
     }
 
@@ -352,11 +347,11 @@ auto rtkit_make_realtime(DBusConnection *const system_bus, pid_t thread, int con
 
     auto error = dbusError{};
     auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(system_bus,
-        std::to_address(m), -1, &error.get())};
-    if(!r) return translate_error(error->name);
+        std::to_address(m), -1, &error)};
+    if(!r) return translate_error(error.name);
 
-    if(dbus_set_error_from_message(&error.get(), std::to_address(r)))
-        return translate_error(error->name);
+    if(dbus_set_error_from_message(&error, std::to_address(r)))
+        return translate_error(error.name);
 
     return 0;
 }
@@ -383,11 +378,11 @@ auto rtkit_make_high_priority(DBusConnection *const system_bus, pid_t thread, in
 
     auto error = dbusError{};
     auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(system_bus,
-        std::to_address(m), -1, &error.get())};
-    if(!r) return translate_error(error->name);
+        std::to_address(m), -1, &error)};
+    if(!r) return translate_error(error.name);
 
-    if(dbus_set_error_from_message(&error.get(), std::to_address(r)))
-        return translate_error(error->name);
+    if(dbus_set_error_from_message(&error, std::to_address(r)))
+        return translate_error(error.name);
 
     return 0;
 }
