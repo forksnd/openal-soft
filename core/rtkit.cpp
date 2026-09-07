@@ -191,6 +191,10 @@ using dbusMessagePtr = std::unique_ptr<DBusMessage, decltype([](DBusMessage *con
     { dbus_message_unref(m); })>;
 
 
+#define RTKIT_SERVICE_NAME "org.freedesktop.RealtimeKit1"
+#define RTKIT_OBJECT_PATH "/org/freedesktop/RealtimeKit1"
+
+[[nodiscard]]
 auto _gettid() -> pid_t
 {
 #ifdef __linux__
@@ -206,6 +210,7 @@ auto _gettid() -> pid_t
 #endif
 }
 
+[[nodiscard]]
 auto translate_error(std::string_view const name) -> int
 {
     if(name == DBUS_ERROR_NO_MEMORY)
@@ -217,6 +222,7 @@ auto translate_error(std::string_view const name) -> int
     return -EIO;
 }
 
+[[nodiscard]]
 auto rtkit_get_int_property(DBusConnection *const connection, gsl::czstring const propname,
     long long *const propval) -> int
 {
@@ -280,53 +286,55 @@ auto rtkit_get_int_property(DBusConnection *const connection, gsl::czstring cons
 
 } // namespace
 
-void dbusConnectionDeleter::operator()(DBusConnection *const conn) const
+void RTKit::dbusConnectionDeleter::operator()(DBusConnection *const conn) const
 { dbus_connection_unref(conn); }
 
-auto rtkit_get_dbus_connection() -> dbusConnectionPtr
+auto RTKit::Create() -> RTKit
 {
+    auto ret = RTKit{};
+
     if(!HasDBus())
     {
         WARN("D-Bus not available");
-        return {};
+        return ret;
     }
     auto error = dbusError{};
     auto conn = dbusConnectionPtr{dbus_bus_get(DBUS_BUS_SYSTEM, &error)};
     if(!conn)
     {
         WARN("D-Bus connection failed with {}: {}", error.name, error.message);
-        return {};
+        return ret;
     }
 
     /* Don't stupidly exit if the connection dies while doing this. */
     dbus_connection_set_exit_on_disconnect(std::to_address(conn), false);
-    return conn;
+    ret.mBus = std::move(conn);
+    return ret;
 }
 
-
-auto rtkit_get_max_realtime_priority(DBusConnection *const system_bus) -> int
+auto RTKit::get_max_realtime_priority() const -> int
 {
     long long retval{};
-    const auto err = rtkit_get_int_property(system_bus, "MaxRealtimePriority", &retval);
+    const auto err = rtkit_get_int_property(mBus.get(), "MaxRealtimePriority", &retval);
     return err < 0 ? err : gsl::narrow_cast<int>(retval);
 }
 
-auto rtkit_get_min_nice_level(DBusConnection *const system_bus, int *const min_nice_level) -> int
+auto RTKit::get_min_nice_level(int *const min_nice_level) const -> int
 {
     long long retval{};
-    auto const err = rtkit_get_int_property(system_bus, "MinNiceLevel", &retval);
+    auto const err = rtkit_get_int_property(mBus.get(), "MinNiceLevel", &retval);
     if(err >= 0) *min_nice_level = gsl::narrow_cast<int>(retval);
     return err;
 }
 
-auto rtkit_get_rttime_usec_max(DBusConnection *const system_bus) -> long long
+auto RTKit::get_rttime_usec_max() const -> long long
 {
     long long retval{};
-    auto const err = rtkit_get_int_property(system_bus, "RTTimeUSecMax", &retval);
+    auto const err = rtkit_get_int_property(mBus.get(), "RTTimeUSecMax", &retval);
     return err < 0 ? err : retval;
 }
 
-auto rtkit_make_realtime(DBusConnection *const system_bus, pid_t thread, int const priority) -> int
+auto RTKit::make_realtime(pid_t thread, int const priority) const -> int
 {
     if(thread == 0)
         thread = _gettid();
@@ -346,7 +354,7 @@ auto rtkit_make_realtime(DBusConnection *const system_bus, pid_t thread, int con
     if(!ready) return -ENOMEM;
 
     auto error = dbusError{};
-    auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(system_bus,
+    auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(mBus.get(),
         std::to_address(m), -1, &error)};
     if(!r) return translate_error(error.name);
 
@@ -356,8 +364,7 @@ auto rtkit_make_realtime(DBusConnection *const system_bus, pid_t thread, int con
     return 0;
 }
 
-auto rtkit_make_high_priority(DBusConnection *const system_bus, pid_t thread, int const nice_level)
-    -> int
+auto RTKit::make_high_priority(pid_t thread, int const nice_level) const -> int
 {
     if(thread == 0)
         thread = _gettid();
@@ -377,7 +384,7 @@ auto rtkit_make_high_priority(DBusConnection *const system_bus, pid_t thread, in
     if(!ready) return -ENOMEM;
 
     auto error = dbusError{};
-    auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(system_bus,
+    auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(mBus.get(),
         std::to_address(m), -1, &error)};
     if(!r) return translate_error(error.name);
 

@@ -375,7 +375,7 @@ auto SearchDataFiles(const std::string_view ext, const std::string_view subdir)
 
 namespace {
 
-bool SetRTPriorityPthread(int prio [[maybe_unused]])
+bool SetRTPriorityPthread(int const prio [[maybe_unused]])
 {
     auto err = ENOTSUP;
 #if defined(HAVE_PTHREAD_SETSCHEDPARAM) && !defined(__OpenBSD__)
@@ -403,24 +403,24 @@ bool SetRTPriorityPthread(int prio [[maybe_unused]])
 bool SetRTPriorityRTKit(int prio [[maybe_unused]])
 {
 #if HAVE_RTKIT
-    auto const conn = rtkit_get_dbus_connection();
-    if(!conn) return false;
+    auto const rtkit = RTKit::Create();
+    if(not rtkit) return false;
 
     auto nicemin = int{};
-    auto err = rtkit_get_min_nice_level(conn.get(), &nicemin);
+    auto err = rtkit.get_min_nice_level(&nicemin);
     if(err == -ENOENT)
     {
         err = std::abs(err);
         ERR("Could not query RTKit: {} ({})", std::generic_category().message(err), err);
         return false;
     }
-    auto rtmax = rtkit_get_max_realtime_priority(conn.get());
+    auto rtmax = rtkit.get_max_realtime_priority();
     TRACE("Maximum real-time priority: {}, minimum niceness: {}", rtmax, nicemin);
 
-    static constexpr auto limit_rttime = [](DBusConnection *c) -> int
+    auto limit_rttime = [&rtkit]() -> int
     {
         using ulonglong = unsigned long long;
-        const auto maxrttime = rtkit_get_rttime_usec_max(c);
+        const auto maxrttime = rtkit.get_rttime_usec_max();
         if(maxrttime <= 0) return gsl::narrow_cast<int>(std::abs(maxrttime));
         const auto umaxtime = gsl::narrow_cast<ulonglong>(maxrttime);
 
@@ -442,7 +442,7 @@ bool SetRTPriorityRTKit(int prio [[maybe_unused]])
     {
         if(AllowRTTimeLimit)
         {
-            err = limit_rttime(conn.get());
+            err = limit_rttime();
             if(err != 0)
                 WARN("Failed to set RLIMIT_RTTIME for RTKit: {} ({})",
                     std::generic_category().message(err), err);
@@ -453,7 +453,7 @@ bool SetRTPriorityRTKit(int prio [[maybe_unused]])
         prio = std::clamp(prio, 1, rtmax);
 
         TRACE("Making real-time with priority {} (max: {})", prio, rtmax);
-        err = rtkit_make_realtime(conn.get(), 0, prio);
+        err = rtkit.make_realtime(0, prio);
         if(err == 0) return true;
 
         err = std::abs(err);
@@ -469,7 +469,7 @@ bool SetRTPriorityRTKit(int prio [[maybe_unused]])
     if(nicemin < 0)
     {
         TRACE("Making high priority with niceness {}", nicemin);
-        err = rtkit_make_high_priority(conn.get(), 0, nicemin);
+        err = rtkit.make_high_priority(0, nicemin);
         if(err == 0) return true;
 
         err = std::abs(err);
