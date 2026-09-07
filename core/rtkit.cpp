@@ -211,41 +211,41 @@ auto _gettid() -> pid_t
 }
 
 [[nodiscard]]
-auto translate_error(std::string_view const name) -> int
+auto translate_error(std::string_view const name) -> std::errc
 {
     if(name == DBUS_ERROR_NO_MEMORY)
-        return -ENOMEM;
+        return std::errc::not_enough_memory;
     if(name == DBUS_ERROR_SERVICE_UNKNOWN || name == DBUS_ERROR_NAME_HAS_NO_OWNER)
-        return -ENOENT;
+        return std::errc::no_such_file_or_directory;
     if(name == DBUS_ERROR_ACCESS_DENIED || name == DBUS_ERROR_AUTH_FAILED)
-        return -EACCES;
-    return -EIO;
+        return std::errc::permission_denied;
+    return std::errc::io_error;
 }
 
 [[nodiscard]]
-auto rtkit_get_int_property(DBusConnection *const connection, gsl::czstring const propname,
-    long long *const propval) -> int
+auto rtkit_get_int_property(DBusConnection *const connection, gsl::czstring const propname)
+    -> rtkitret_t<long long>
 {
     auto const m = dbusMessagePtr{dbus_message_new_method_call(RTKIT_SERVICE_NAME,
         RTKIT_OBJECT_PATH, "org.freedesktop.DBus.Properties", "Get")};
-    if(!m) return -ENOMEM;
+    if(!m) return al::unexpected(std::errc::not_enough_memory);
 
     auto *const interfacestr = gsl::czstring{RTKIT_SERVICE_NAME};
     auto const ready = dbus_message_append_args(std::to_address(m),
         dbusTypeString, &interfacestr,
         dbusTypeString, &propname,
         dbusTypeInvalid);
-    if(!ready) return -ENOMEM;
+    if(!ready) return al::unexpected(std::errc::not_enough_memory);
 
     auto error = dbusError{};
     auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(connection,
         std::to_address(m), -1, &error)};
-    if(!r) return translate_error(error.name);
+    if(!r) return al::unexpected(translate_error(error.name));
 
     if(dbus_set_error_from_message(&error, std::to_address(r)))
-        return translate_error(error.name);
+        return al::unexpected(translate_error(error.name));
 
-    auto ret = -EBADMSG;
+    auto ret = rtkitret_t<long long>{al::unexpected(std::errc::bad_message)};
     auto iter = DBusMessageIter{};
     dbus_message_iter_init(std::to_address(r), &iter);
     while(auto curtype = dbus_message_iter_get_arg_type(&iter))
@@ -262,16 +262,14 @@ auto rtkit_get_int_property(DBusConnection *const connection, gsl::czstring cons
                 {
                     auto val32 = dbus_int32_t{};
                     dbus_message_iter_get_basic(&subiter, &val32);
-                    *propval = val32;
-                    ret = 0;
+                    ret.emplace(val32);
                 }
 
                 if(curtype == dbusTypeInt64)
                 {
                     auto val64 = dbus_int64_t{};
                     dbus_message_iter_get_basic(&subiter, &val64);
-                    *propval = val64;
-                    ret = 0;
+                    ret.emplace(val64);
                 }
 
                 dbus_message_iter_next(&subiter);
@@ -312,38 +310,35 @@ auto RTKit::Create() -> RTKit
     return ret;
 }
 
-auto RTKit::get_max_realtime_priority() const -> int
+auto RTKit::get_max_realtime_priority() const -> rtkitret_t<int>
 {
-    long long retval{};
-    const auto err = rtkit_get_int_property(mBus.get(), "MaxRealtimePriority", &retval);
-    return err < 0 ? err : gsl::narrow_cast<int>(retval);
+    return rtkit_get_int_property(mBus.get(), "MaxRealtimePriority")
+        .and_then([](long long const val) -> rtkitret_t<int>
+            { return gsl::narrow_cast<int>(val); });
 }
 
-auto RTKit::get_min_nice_level(int *const min_nice_level) const -> int
+auto RTKit::get_min_nice_level() const -> rtkitret_t<int>
 {
-    long long retval{};
-    auto const err = rtkit_get_int_property(mBus.get(), "MinNiceLevel", &retval);
-    if(err >= 0) *min_nice_level = gsl::narrow_cast<int>(retval);
-    return err;
+    return rtkit_get_int_property(mBus.get(), "MinNiceLevel")
+        .and_then([](long long const val) -> rtkitret_t<int>
+            { return gsl::narrow_cast<int>(val); });;
 }
 
-auto RTKit::get_rttime_usec_max() const -> long long
+auto RTKit::get_rttime_usec_max() const -> rtkitret_t<long long>
 {
-    long long retval{};
-    auto const err = rtkit_get_int_property(mBus.get(), "RTTimeUSecMax", &retval);
-    return err < 0 ? err : retval;
+    return rtkit_get_int_property(mBus.get(), "RTTimeUSecMax");
 }
 
-auto RTKit::make_realtime(pid_t thread, int const priority) const -> int
+auto RTKit::make_realtime(pid_t thread, int const priority) const -> rtkitret_t<void>
 {
     if(thread == 0)
         thread = _gettid();
     if(thread == 0)
-        return -ENOTSUP;
+        return al::unexpected(std::errc::not_supported);
 
     auto const m = dbusMessagePtr{dbus_message_new_method_call(RTKIT_SERVICE_NAME,
         RTKIT_OBJECT_PATH, "org.freedesktop.RealtimeKit1", "MakeThreadRealtime")};
-    if(!m) return -ENOMEM;
+    if(!m) return al::unexpected(std::errc::not_enough_memory);
 
     auto tid64 = gsl::narrow_cast<dbus_uint64_t>(thread);
     auto prio32 = gsl::narrow_cast<dbus_uint32_t>(priority);
@@ -351,29 +346,29 @@ auto RTKit::make_realtime(pid_t thread, int const priority) const -> int
         dbusTypeUInt64, &tid64,
         dbusTypeUInt32, &prio32,
         dbusTypeInvalid);
-    if(!ready) return -ENOMEM;
+    if(!ready) return al::unexpected(std::errc::not_enough_memory);
 
     auto error = dbusError{};
     auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(mBus.get(),
         std::to_address(m), -1, &error)};
-    if(!r) return translate_error(error.name);
+    if(!r) return al::unexpected(translate_error(error.name));
 
     if(dbus_set_error_from_message(&error, std::to_address(r)))
-        return translate_error(error.name);
+        return al::unexpected(translate_error(error.name));
 
-    return 0;
+    return {};
 }
 
-auto RTKit::make_high_priority(pid_t thread, int const nice_level) const -> int
+auto RTKit::make_high_priority(pid_t thread, int const nice_level) const -> rtkitret_t<void>
 {
     if(thread == 0)
         thread = _gettid();
     if(thread == 0)
-        return -ENOTSUP;
+        return al::unexpected(std::errc::not_supported);
 
     auto const m = dbusMessagePtr{dbus_message_new_method_call(RTKIT_SERVICE_NAME,
         RTKIT_OBJECT_PATH, "org.freedesktop.RealtimeKit1", "MakeThreadHighPriority")};
-    if(!m) return -ENOMEM;
+    if(!m) return al::unexpected(std::errc::not_enough_memory);
 
     auto tid64 = gsl::narrow_cast<dbus_uint64_t>(thread);
     auto level32 = gsl::narrow_cast<dbus_int32_t>(nice_level);
@@ -381,15 +376,15 @@ auto RTKit::make_high_priority(pid_t thread, int const nice_level) const -> int
         dbusTypeUInt64, &tid64,
         dbusTypeInt32, &level32,
         dbusTypeInvalid);
-    if(!ready) return -ENOMEM;
+    if(!ready) return al::unexpected(std::errc::not_enough_memory);
 
     auto error = dbusError{};
     auto const r = dbusMessagePtr{dbus_connection_send_with_reply_and_block(mBus.get(),
         std::to_address(m), -1, &error)};
-    if(!r) return translate_error(error.name);
+    if(!r) return al::unexpected(translate_error(error.name));
 
     if(dbus_set_error_from_message(&error, std::to_address(r)))
-        return translate_error(error.name);
+        return al::unexpected(translate_error(error.name));
 
-    return 0;
+    return {};
 }
