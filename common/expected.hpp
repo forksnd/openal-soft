@@ -1,13 +1,48 @@
 #ifndef AL_EXPECTED_HPP
 #define AL_EXPECTED_HPP
 
+#include <exception>
 #include <type_traits>
 #include <utility>
-#include <variant>
 
 #include "opthelpers.h"
 
 namespace al {
+
+struct monostate { };
+
+template<typename Er>
+class bad_expected_access;
+
+template<>
+class bad_expected_access<void> : public std::exception {
+protected:
+    bad_expected_access() noexcept = default;
+    bad_expected_access(bad_expected_access const&) noexcept = default;
+    bad_expected_access(bad_expected_access&&) noexcept = default;
+    auto operator=(bad_expected_access const&) noexcept LIFETIMEBOUND -> bad_expected_access& = default;
+    auto operator=(bad_expected_access&&) noexcept LIFETIMEBOUND -> bad_expected_access& = default;
+    ~bad_expected_access() override = default;
+
+public:
+    [[nodiscard]]
+    auto what() const noexcept -> const char* override
+    { return "accessing al::expected with no value"; }
+};
+
+template<typename Er>
+class bad_expected_access : public bad_expected_access<void> {
+    Er mError;
+
+public:
+    explicit bad_expected_access(Er error) : mError{std::move(error)} { }
+
+    auto error() const& noexcept -> Er const& { return mError; }
+    auto error() & noexcept -> Er& { return mError; }
+    auto error() const&& noexcept -> Er const&& { return std::move(mError); }
+    auto error() && noexcept -> Er&& { return std::move(mError); }
+};
+
 
 template<typename E>
 class unexpected {
@@ -50,35 +85,42 @@ public:
 template<typename E>
 unexpected(E) -> unexpected<E>;
 
-namespace detail_ {
 
-template<typename T> struct VSType { using type = T; };
-template<> struct VSType<void> { using type = std::monostate; };
-template<typename T>
-using VSType_t = typename VSType<T>::type;
-}
+struct unexpect_t { };
+inline constexpr auto unexpect = unexpect_t{};
+
 
 template<typename Ty, typename Er>
 class [[nodiscard]] expected {
-    using S = detail_::VSType_t<Ty>;
-    using variant_type = std::variant<S, Er>;
-
     static constexpr auto void_success = std::is_same_v<std::remove_cv_t<Ty>, void>;
 
-    std::variant<S, Er> mValues;
+    using S = std::conditional_t<void_success, monostate, Ty>;
+    union {
+        S mObject{};
+        Er mError;
+    };
+    bool mHasObject{true};
+
+    /* NOLINTBEGIN(cppcoreguidelines-pro-type-union-access) */
+    auto check_object() const -> void { if(not mHasObject) throw bad_expected_access<Er>{mError}; }
 
 public:
-    constexpr expected() noexcept(std::is_nothrow_default_constructible_v<variant_type>) = default;
-    constexpr expected(const expected &rhs) noexcept(std::is_nothrow_copy_constructible_v<variant_type>) = default;
-    constexpr expected(expected&& rhs) noexcept(std::is_nothrow_move_constructible_v<variant_type>) = default;
+    constexpr expected() noexcept(std::is_nothrow_default_constructible_v<S>) = default;
+    constexpr expected(const expected &rhs) noexcept(std::is_nothrow_copy_constructible_v<S> and std::is_nothrow_copy_constructible_v<Er>) = default;
+    constexpr expected(expected&& rhs) noexcept(std::is_nothrow_move_constructible_v<S> and std::is_nothrow_move_constructible_v<Er>) = default;
+    constexpr ~expected()
+    {
+        if(mHasObject) std::destroy_at(&mObject);
+        else std::destroy_at(&mError);
+    }
+    constexpr ~expected() requires(std::is_trivially_destructible_v<S> and std::is_trivially_destructible_v<Er>) = default;
 
     /* Value constructors */
     template<typename U=std::remove_cv_t<Ty>>
         requires(not std::is_same_v<std::remove_cvref_t<U>, std::in_place_t>
             and not std::is_same_v<expected, std::remove_cvref_t<U>>
             and std::is_constructible_v<Ty, U>)
-    constexpr explicit(!std::is_convertible_v<U, S>) expected(U&& v)
-        : mValues{std::in_place_index<0>, std::forward<U>(v)}
+    constexpr explicit(!std::is_convertible_v<U, Ty>) expected(U&& v) : mObject{std::forward<U>(v)}
     { }
 
     template<typename ...Args>
@@ -86,7 +128,7 @@ public:
     expected(std::in_place_t, Args&& ...args)
         requires(not std::is_same_v<std::remove_cv_t<Ty>, void>
             and std::is_constructible_v<Ty, Args...>)
-        : mValues{std::in_place_index<0>, std::forward<Args>(args)...}
+        : mObject{std::forward<Args>(args)...}
     { }
 
     constexpr explicit
@@ -96,48 +138,64 @@ public:
     /* Error constructors */
     template<typename U> requires(std::is_constructible_v<Er, const U&>)
     constexpr explicit(not std::is_convertible_v<const U&, Er>)
-    expected(const unexpected<Ty> &rhs)
-        : mValues{std::in_place_index<1>, rhs.error()}
+    expected(unexpected<U> const &rhs)
+        : mError{rhs.error()}, mHasObject{false}
     { }
 
     template<typename U> requires(std::is_constructible_v<Er, U>)
-    constexpr explicit(!std::is_convertible_v<U, Er>) expected(unexpected<U>&& rhs)
-        : mValues{std::in_place_index<1>, std::move(rhs).error()}
+    constexpr explicit(not std::is_convertible_v<U, Er>) expected(unexpected<U>&& rhs)
+        : mError{std::move(rhs).error()}, mHasObject{false}
+    { }
+
+    template<typename ...Args>
+    constexpr explicit
+    expected(unexpect_t, Args&& ...args)
+        requires(std::is_constructible_v<Er, Args...>)
+        : mError{std::forward<Args>(args)...}, mHasObject{false}
     { }
 
     template<typename ...Args> requires(std::is_nothrow_constructible_v<Ty, Args...>) constexpr
     auto emplace(Args&& ...args) & noexcept LIFETIMEBOUND -> expected&
     {
-        mValues.template emplace<0>(std::forward<Args>(args)...);
+        if(mHasObject) std::destroy_at(&mObject);
+        else std::destroy_at(&mError);
+        std::construct_at(&mObject, std::forward<Args>(args)...);
         return *this;
     }
 
-    [[nodiscard]] constexpr auto has_value() const noexcept -> bool { return mValues.index() == 0; }
+    [[nodiscard]] constexpr auto has_value() const noexcept -> bool { return mHasObject; }
     [[nodiscard]] constexpr explicit operator bool() const noexcept { return has_value(); }
 
-    [[nodiscard]] constexpr auto operator*() & noexcept -> S& requires(not void_success)
-    { return *std::get_if<0>(&mValues); }
-    [[nodiscard]] constexpr auto operator*() const& noexcept -> S const& requires(not void_success)
-    { return *std::get_if<0>(&mValues); }
-    [[nodiscard]] constexpr auto operator*() && noexcept -> S&& requires(not void_success)
-    { return std::move(*std::get_if<0>(&mValues)); }
+    [[nodiscard]] constexpr
+    auto operator*() & noexcept -> S& requires(not void_success) { return mObject; }
+    [[nodiscard]] constexpr
+    auto operator*() const& noexcept -> S const& requires(not void_success) { return mObject; }
+    [[nodiscard]] constexpr
+    auto operator*() && noexcept -> S&& requires(not void_success) { return std::move(mObject); }
     [[nodiscard]] constexpr
     auto operator*() const&& noexcept -> S const&& requires(not void_success)
-    { return std::move(*std::get_if<0>(&mValues)); }
+    { return std::move(mObject); }
 
-    [[nodiscard]] constexpr auto value() & -> S& requires(not void_success)
-    { return std::get<0>(mValues); }
-    [[nodiscard]] constexpr auto value() const& -> const S& requires(not void_success)
-    { return std::get<0>(mValues); }
-    [[nodiscard]] constexpr auto value() && -> S&& requires(not void_success)
-    { return std::move(std::get<0>(mValues)); }
-    [[nodiscard]] constexpr auto value() const&& -> const S&& requires(not void_success)
-    { return std::move(std::get<0>(mValues)); }
+    [[nodiscard]] constexpr
+    auto operator->() noexcept -> S* requires(not void_success) { return &mObject; }
+    [[nodiscard]] constexpr
+    auto operator->() const noexcept -> S const* requires(not void_success) { return &mObject; }
 
-    [[nodiscard]] constexpr auto operator->() noexcept -> S* requires(not void_success)
-    { return std::get_if<0>(&mValues); }
-    [[nodiscard]] constexpr auto operator->() const noexcept -> const S* requires(not void_success)
-    { return std::get_if<0>(&mValues); }
+    constexpr auto value() const& -> void { check_object(); }
+    constexpr auto value() & -> void { check_object(); }
+    constexpr auto value() const&& -> void { check_object(); }
+    constexpr auto value() && -> void { check_object(); }
+
+    [[nodiscard]] constexpr
+    auto value() & -> S& requires(not void_success) { check_object(); return mObject; }
+    [[nodiscard]] constexpr
+    auto value() const& -> const S& requires(not void_success) { check_object(); return mObject; }
+    [[nodiscard]] constexpr
+    auto value() && -> S&& requires(not void_success)
+    { check_object(); return std::move(mObject); }
+    [[nodiscard]] constexpr
+    auto value() const&& -> const S&& requires(not void_success)
+    { check_object(); return std::move(mObject); }
 
     template<typename U> [[nodiscard]] constexpr
     auto value_or(U&& defval) const& -> S requires(not void_success)
@@ -146,43 +204,44 @@ public:
     auto value_or(U&& defval) && -> S requires(not void_success)
     { return bool{*this} ? std::move(**this) : static_cast<S>(std::forward<U>(defval)); }
 
-    [[nodiscard]] constexpr auto error() & -> Er& { return std::get<1>(mValues); }
-    [[nodiscard]] constexpr auto error() const& -> const Er& { return std::get<1>(mValues); }
-    [[nodiscard]] constexpr auto error() && -> Er&& { return std::move(std::get<1>(mValues)); }
-    [[nodiscard]] constexpr auto error() const&& -> const Er&& { return std::move(std::get<1>(mValues)); }
+    [[nodiscard]] constexpr auto error() & -> Er& { return mError; }
+    [[nodiscard]] constexpr auto error() const& -> const Er& { return mError; }
+    [[nodiscard]] constexpr auto error() && -> Er&& { return std::move(mError); }
+    [[nodiscard]] constexpr auto error() const&& -> const Er&& { return std::move(mError); }
 
     template<typename F> [[nodiscard]] constexpr
     auto and_then(F&& fn) &
     {
         using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Ty&>>;
         if(has_value())
-            return std::invoke(std::forward<F>(fn), **this);
-        return ret_t{al::unexpected(error())};
+            return std::invoke(std::forward<F>(fn), mObject);
+        return ret_t{unexpect, mError};
     }
     template<typename F> [[nodiscard]] constexpr
     auto and_then(F&& fn) const&
     {
         using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Ty const&>>;
         if(has_value())
-            return std::invoke(std::forward<F>(fn), **this);
-        return ret_t{al::unexpected(error())};
+            return std::invoke(std::forward<F>(fn), mObject);
+        return ret_t{unexpect, mError};
     }
     template<typename F> [[nodiscard]] constexpr
     auto and_then(F&& fn) &&
     {
         using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Ty&&>>;
         if(has_value())
-            return std::invoke(std::forward<F>(fn), std::move(**this));
-        return ret_t{al::unexpected(error())};
+            return std::invoke(std::forward<F>(fn), std::move(mObject));
+        return ret_t{unexpect, std::move(mError)};
     }
     template<typename F> [[nodiscard]] constexpr
     auto and_then(F&& fn) const&&
     {
         using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Ty const&&>>;
         if(has_value())
-            return std::invoke(std::forward<F>(fn), std::move(**this));
-        return ret_t{al::unexpected(error())};
+            return std::invoke(std::forward<F>(fn), std::move(mObject));
+        return ret_t{unexpect, std::move(mError)};
     }
+    /* NOLINTEND(cppcoreguidelines-pro-type-union-access) */
 };
 
 } /* namespace al */
