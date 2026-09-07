@@ -108,7 +108,7 @@ struct UhjDecoder final : DecoderBase {
     struct Tag { using decoder_t = UhjDecoder; };
 
     /* The number of extra sample frames needed for input. */
-    static constexpr auto sInputPadding = N/2_uz;
+    static constexpr auto sInputPadding = unsigned{N/2u};
 
     alignas(16) std::array<float,BufferLineSize+sInputPadding> mS{};
     alignas(16) std::array<float,BufferLineSize+sInputPadding> mD{};
@@ -141,7 +141,7 @@ struct UhjDecoderIIR final : DecoderBase {
      * by one sample. The first filtered output sample is cut to align it with
      * the first non-filtered sample, similar to the FIR filters.
      */
-    static constexpr auto sInputPadding = 1_uz;
+    static constexpr auto sInputPadding = 1u;
 
     bool mFirstRun{true};
     alignas(16) std::array<float,BufferLineSize+sInputPadding> mS{};
@@ -161,7 +161,7 @@ template<std::size_t N>
 struct UhjStereoDecoder final : DecoderBase {
     struct Tag { using decoder_t = UhjStereoDecoder; };
 
-    static constexpr auto sInputPadding = N/2_uz;
+    static constexpr auto sInputPadding = unsigned{N/2u};
 
     float mCurrentWidth{-1.0f};
 
@@ -187,7 +187,7 @@ using UhjStereoDecoder512 = UhjStereoDecoder<512>;
 struct UhjStereoDecoderIIR final : DecoderBase {
     struct Tag { using decoder_t = UhjStereoDecoderIIR; };
 
-    static constexpr auto sInputPadding = 1_uz;
+    static constexpr auto sInputPadding = 1u;
 
     bool mFirstRun{true};
     float mCurrentWidth{-1.0f};

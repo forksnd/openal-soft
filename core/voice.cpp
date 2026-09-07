@@ -1266,39 +1266,21 @@ void Voice::prepare(DeviceBase *device)
         -> std::pair<std::unique_ptr<DecoderBase>, unsigned>
     {
         using decoder_t = T::decoder_t;
-        return {std::make_unique<decoder_t>(), static_cast<unsigned>(decoder_t::sInputPadding)};
+        return {std::make_unique<decoder_t>(), decoder_t::sInputPadding};
     };
     if(mFmtChannels == FmtSuperStereo)
     {
-        if(std::holds_alternative<TsmePostProcess>(device->mPostProcess))
+        switch(UhjDecodeQuality)
         {
-            switch(TsmeDecodeQuality)
-            {
-            case TsmeQualityType::IIR:
-                std::tie(mDecoder, mDecoderPadding) = init_decoder(TsmeStereoDecoderIIR::Tag{});
-                break;
-            case TsmeQualityType::FIR256:
-                std::tie(mDecoder, mDecoderPadding) = init_decoder(TsmeStereoDecoder256::Tag{});
-                break;
-            case TsmeQualityType::FIR512:
-                std::tie(mDecoder, mDecoderPadding) = init_decoder(TsmeStereoDecoder512::Tag{});
-                break;
-            }
-        }
-        else
-        {
-            switch(UhjDecodeQuality)
-            {
-            case UhjQualityType::IIR:
-                std::tie(mDecoder, mDecoderPadding) = init_decoder(UhjStereoDecoderIIR::Tag{});
-                break;
-            case UhjQualityType::FIR256:
-                std::tie(mDecoder, mDecoderPadding) = init_decoder(UhjStereoDecoder256::Tag{});
-                break;
-            case UhjQualityType::FIR512:
-                std::tie(mDecoder, mDecoderPadding) = init_decoder(UhjStereoDecoder512::Tag{});
-                break;
-            }
+        case UhjQualityType::IIR:
+            std::tie(mDecoder, mDecoderPadding) = init_decoder(UhjStereoDecoderIIR::Tag{});
+            break;
+        case UhjQualityType::FIR256:
+            std::tie(mDecoder, mDecoderPadding) = init_decoder(UhjStereoDecoder256::Tag{});
+            break;
+        case UhjQualityType::FIR512:
+            std::tie(mDecoder, mDecoderPadding) = init_decoder(UhjStereoDecoder512::Tag{});
+            break;
         }
     }
     else if(IsUHJ(mFmtChannels))
