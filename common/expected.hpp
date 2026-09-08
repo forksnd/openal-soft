@@ -14,7 +14,7 @@ struct monostate { };
 template<typename Er>
 class bad_expected_access;
 
-template<>
+template<> /* NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor) */
 class bad_expected_access<void> : public std::exception {
 protected:
     bad_expected_access() noexcept = default;
@@ -92,7 +92,7 @@ inline constexpr auto unexpect = unexpect_t{};
 
 template<typename Ty, typename Er>
 class [[nodiscard]] expected {
-    static constexpr auto void_success = std::is_same_v<std::remove_cv_t<Ty>, void>;
+    static constexpr auto void_success = std::is_void_v<Ty>;
 
     using S = std::conditional_t<void_success, monostate, Ty>;
     union {
@@ -123,16 +123,12 @@ public:
     constexpr explicit(!std::is_convertible_v<U, Ty>) expected(U&& v) : mObject{std::forward<U>(v)}
     { }
 
-    template<typename ...Args>
+    template<typename ...Args> requires(not void_success and std::is_constructible_v<Ty, Args...>)
     constexpr explicit
-    expected(std::in_place_t, Args&& ...args)
-        requires(not std::is_same_v<std::remove_cv_t<Ty>, void>
-            and std::is_constructible_v<Ty, Args...>)
-        : mObject{std::forward<Args>(args)...}
-    { }
+    expected(std::in_place_t, Args&& ...args) : mObject{std::forward<Args>(args)...} { }
 
     constexpr explicit
-    expected(std::in_place_t) noexcept requires(std::is_same_v<std::remove_cv_t<Ty>, void>)
+    expected(std::in_place_t) noexcept requires(void_success)
     { }
 
     /* Error constructors */
@@ -242,6 +238,30 @@ public:
         return ret_t{unexpect, std::move(mError)};
     }
     /* NOLINTEND(cppcoreguidelines-pro-type-union-access) */
+
+    template<typename Ty2, typename Er2> requires(not void_success and not std::is_void_v<Ty2>)
+        friend constexpr
+    auto operator==(expected const &lhs, expected<Ty2, Er2> const &rhs) noexcept -> bool
+    {
+        return lhs.has_value() != rhs.has_value() ? false
+            : (lhs.has_value() ? *lhs == *rhs : lhs.error() == rhs.error());
+    }
+
+    template<typename Ty2, typename Er2> requires(void_success and std::is_void_v<Ty2>) friend
+        constexpr
+    auto operator==(expected const &lhs, expected<Ty2, Er2> const &rhs) noexcept -> bool
+    {
+        return lhs.has_value() != rhs.has_value() ? false
+            : (lhs.has_value() or lhs.error() == rhs.error());
+    }
+
+    template<typename Er2> friend constexpr
+    auto operator==(expected const &lhs, unexpected<Er2> const &unex) noexcept -> bool
+    { return not lhs.has_value() and lhs.error() == unex.error(); }
+
+    template<class Ty2> requires(not void_success) friend constexpr
+    auto operator==(expected const &lhs, Ty2 const &val) noexcept -> bool
+    { return lhs.has_value() and *lhs == val; }
 };
 
 } /* namespace al */
