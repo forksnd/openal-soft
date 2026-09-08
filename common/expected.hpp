@@ -90,6 +90,11 @@ struct unexpect_t { };
 inline constexpr auto unexpect = unexpect_t{};
 
 
+namespace detail_ {
+    /* Internal tag type to construct an expected with an invocable. */
+    struct in_place_inv_ { };
+}
+
 template<typename Ty, typename Er>
 class [[nodiscard]] expected {
     static constexpr auto void_success = std::is_void_v<Ty>;
@@ -103,6 +108,18 @@ class [[nodiscard]] expected {
 
     /* NOLINTBEGIN(cppcoreguidelines-pro-type-union-access) */
     auto check_object() const -> void { if(not mHasObject) throw bad_expected_access<Er>{mError}; }
+
+    /* Internal constructor to initialize from a callable without a copy/move
+     * of the returned object (or assigns nothing for a void success type).
+     */
+    template<typename, typename> friend class expected;
+
+    using in_place_inv_ = detail_::in_place_inv_;
+
+    template<typename F> requires(not void_success) explicit constexpr
+    expected(in_place_inv_, F&& f) : mObject{std::invoke(std::forward<F>(f))} { }
+    template<typename F> requires(void_success) explicit constexpr
+    expected(in_place_inv_, F&& f) { std::invoke(std::forward<F>(f)); }
 
 public:
     constexpr expected() noexcept(std::is_nothrow_default_constructible_v<S>) = default;
@@ -120,34 +137,27 @@ public:
         requires(not std::is_same_v<std::remove_cvref_t<U>, std::in_place_t>
             and not std::is_same_v<expected, std::remove_cvref_t<U>>
             and std::is_constructible_v<Ty, U>)
-    constexpr explicit(!std::is_convertible_v<U, Ty>) expected(U&& v) : mObject{std::forward<U>(v)}
-    { }
+        constexpr
+    explicit(!std::is_convertible_v<U, Ty>) expected(U&& v) : mObject{std::forward<U>(v)} { }
 
     template<typename ...Args> requires(not void_success and std::is_constructible_v<Ty, Args...>)
-    constexpr explicit
+        constexpr explicit
     expected(std::in_place_t, Args&& ...args) : mObject{std::forward<Args>(args)...} { }
 
     constexpr explicit
-    expected(std::in_place_t) noexcept requires(void_success)
-    { }
+    expected(std::in_place_t) noexcept requires(void_success) { }
 
     /* Error constructors */
-    template<typename U> requires(std::is_constructible_v<Er, const U&>)
-    constexpr explicit(not std::is_convertible_v<const U&, Er>)
-    expected(unexpected<U> const &rhs)
-        : mError{rhs.error()}, mHasObject{false}
-    { }
+    template<typename U> requires(std::is_constructible_v<Er, const U&>) constexpr
+        explicit(not std::is_convertible_v<const U&, Er>)
+    expected(unexpected<U> const &rhs) : mError{rhs.error()}, mHasObject{false} { }
 
-    template<typename U> requires(std::is_constructible_v<Er, U>)
-    constexpr explicit(not std::is_convertible_v<U, Er>) expected(unexpected<U>&& rhs)
-        : mError{std::move(rhs).error()}, mHasObject{false}
-    { }
+    template<typename U> requires(std::is_constructible_v<Er, U>) constexpr
+        explicit(not std::is_convertible_v<U, Er>)
+    expected(unexpected<U>&& rhs) : mError{std::move(rhs).error()}, mHasObject{false} { }
 
-    template<typename ...Args>
-    constexpr explicit
-    expected(unexpect_t, Args&& ...args)
-        requires(std::is_constructible_v<Er, Args...>)
-        : mError{std::forward<Args>(args)...}, mHasObject{false}
+    template<typename ...Args> requires(std::is_constructible_v<Er, Args...>) constexpr explicit
+    expected(unexpect_t, Args&& ...args) : mError{std::forward<Args>(args)...}, mHasObject{false}
     { }
 
     template<typename ...Args> requires(std::is_nothrow_constructible_v<Ty, Args...>) constexpr
@@ -200,10 +210,11 @@ public:
     auto value_or(U&& defval) && -> S requires(not void_success)
     { return bool{*this} ? std::move(**this) : static_cast<S>(std::forward<U>(defval)); }
 
-    [[nodiscard]] constexpr auto error() & -> Er& { return mError; }
-    [[nodiscard]] constexpr auto error() const& -> const Er& { return mError; }
-    [[nodiscard]] constexpr auto error() && -> Er&& { return std::move(mError); }
-    [[nodiscard]] constexpr auto error() const&& -> const Er&& { return std::move(mError); }
+    [[nodiscard]] constexpr auto error() & noexcept -> Er& { return mError; }
+    [[nodiscard]] constexpr auto error() const& noexcept -> const Er& { return mError; }
+    [[nodiscard]] constexpr auto error() && noexcept -> Er&& { return std::move(mError); }
+    [[nodiscard]] constexpr
+    auto error() const&& noexcept -> const Er&& { return std::move(mError); }
 
     template<typename F> [[nodiscard]] constexpr
     auto and_then(F&& fn) &
@@ -235,6 +246,67 @@ public:
         using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Ty const&&>>;
         if(has_value())
             return std::invoke(std::forward<F>(fn), std::move(mObject));
+        return ret_t{unexpect, std::move(mError)};
+    }
+
+    template<typename F> [[nodiscard]] constexpr
+    auto transform(F&& fn) &
+    {
+        using Ty2 = std::remove_cv_t<std::invoke_result_t<F&&, Ty&>>;
+        using ret_t = expected<Ty2, Er>;
+        if(has_value())
+        {
+            if constexpr(void_success)
+                return ret_t{in_place_inv_{}, std::forward<F>(fn)};
+            else
+                return ret_t{in_place_inv_{},
+                    [&]{ return std::invoke(std::forward<F>(fn), mObject); }};
+        }
+        return ret_t{unexpect, mError};
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto transform(F&& fn) const&
+    {
+        using Ty2 = std::remove_cv_t<std::invoke_result_t<F&&, Ty const&>>;
+        using ret_t = expected<Ty2, Er>;
+        if(has_value())
+        {
+            if constexpr(void_success)
+                return ret_t{in_place_inv_{}, std::forward<F>(fn)};
+            else
+                return ret_t{in_place_inv_{},
+                    [&]{ return std::invoke(std::forward<F>(fn), mObject); }};
+        }
+        return ret_t{unexpect, mError};
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto transform(F&& fn) &&
+    {
+        using Ty2 = std::remove_cv_t<std::invoke_result_t<F&&, Ty&&>>;
+        using ret_t = expected<Ty2, Er>;
+        if(has_value())
+        {
+            if constexpr(void_success)
+                return ret_t{in_place_inv_{}, std::forward<F>(fn)};
+            else
+                return ret_t{in_place_inv_{},
+                    [&]{ return std::invoke(std::forward<F>(fn), std::move(mObject)); }};
+        }
+        return ret_t{unexpect, std::move(mError)};
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto transform(F&& fn) const&&
+    {
+        using Ty2 = std::remove_cv_t<std::invoke_result_t<F&&, Ty const&&>>;
+        using ret_t = expected<Ty2, Er>;
+        if(has_value())
+        {
+            if constexpr(void_success)
+                return ret_t{in_place_inv_{}, std::forward<F>(fn)};
+            else
+                return ret_t{in_place_inv_{},
+                    [&]{ return std::invoke(std::forward<F>(fn), std::move(mObject)); }};
+        }
         return ret_t{unexpect, std::move(mError)};
     }
     /* NOLINTEND(cppcoreguidelines-pro-type-union-access) */

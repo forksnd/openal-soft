@@ -23,10 +23,9 @@ template<typename T> [[nodiscard]]
 auto GetSymbolAddress(void *const handle, gsl::czstring const name)
     -> al::expected<T*, std::string>
 {
-    auto result = GetSymbol_(handle, name);
-    /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
-    if(result) [[likely]] return reinterpret_cast<T*>(std::move(result).value());
-    return al::unexpected(std::move(result).error());
+    return GetSymbol_(handle, name)
+        /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
+        .transform([](void *fn) { return reinterpret_cast<T*>(fn); });
 }
 
 #endif
