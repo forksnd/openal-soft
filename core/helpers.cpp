@@ -406,7 +406,7 @@ bool SetRTPriorityRTKit(int prio [[maybe_unused]])
     auto const rtkit = RTKit::Create();
     if(not rtkit) return false;
 
-    auto nicemin = rtkit.get_min_nice_level();
+    auto const nicemin = rtkit.get_min_nice_level();
     if(not nicemin.has_value())
     {
         auto const err = std::make_error_code(nicemin.error());
@@ -414,7 +414,13 @@ bool SetRTPriorityRTKit(int prio [[maybe_unused]])
         return false;
     }
     auto rtmax = rtkit.get_max_realtime_priority();
-    TRACE("Maximum real-time priority: {}, minimum niceness: {}", rtmax.value(), *nicemin);
+    if(not rtmax.has_value())
+    {
+        auto const err = std::make_error_code(rtmax.error());
+        ERR("Could not get max realtime priority: {} ({})", err.message(), err.value());
+        return false;
+    }
+    TRACE("Maximum real-time priority: {}, minimum niceness: {}", *rtmax, *nicemin);
 
     if(*rtmax > 0)
     {
