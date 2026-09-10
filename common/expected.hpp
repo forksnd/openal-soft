@@ -109,6 +109,16 @@ class [[nodiscard]] expected {
     /* NOLINTBEGIN(cppcoreguidelines-pro-type-union-access) */
     auto check_object() const -> void { if(not mHasObject) throw bad_expected_access<Er>{mError}; }
 
+#if defined(_GLIBCXX_DEBUG_ASSERT)
+#define assert_object(x, msg) _GLIBCXX_DEBUG_ASSERT(x)
+#elif defined(_LIBCPP_ASSERT_VALID_ELEMENT_ACCESS)
+#define assert_object(x, msg) _LIBCPP_ASSERT_VALID_ELEMENT_ACCESS(x, msg)
+#elif defined( _STL_VERIFY) && (_MSVC_STL_HARDENING_EXPECTED || _ITERATOR_DEBUG_LEVEL != 0)
+#define assert_object(x, msg) _STL_VERIFY(x, msg)
+#else
+#define assert_object(x, msg) static_cast<void>(0)
+#endif
+
     /* Internal constructor to initialize from a callable without a copy/move
      * of the returned object (or assigns nothing for a void success type).
      */
@@ -123,8 +133,18 @@ class [[nodiscard]] expected {
 
 public:
     constexpr expected() noexcept(std::is_nothrow_default_constructible_v<S>) = default;
-    constexpr expected(const expected &rhs) noexcept(std::is_nothrow_copy_constructible_v<S> and std::is_nothrow_copy_constructible_v<Er>) = default;
-    constexpr expected(expected&& rhs) noexcept(std::is_nothrow_move_constructible_v<S> and std::is_nothrow_move_constructible_v<Er>) = default;
+    constexpr expected(const expected &rhs)
+        noexcept(std::is_nothrow_copy_constructible_v<S>
+            and std::is_nothrow_copy_constructible_v<Er>)
+        requires(std::is_trivially_copy_constructible_v<S>
+            and std::is_trivially_copy_constructible_v<Er>)
+        = default;
+    constexpr expected(expected&& rhs)
+        noexcept(std::is_nothrow_move_constructible_v<S>
+            and std::is_nothrow_move_constructible_v<Er>)
+        requires(std::is_trivially_move_constructible_v<S>
+            and std::is_trivially_move_constructible_v<Er>)
+        = default;
     constexpr ~expected()
     {
         if(mHasObject) std::destroy_at(&mObject);
@@ -173,19 +193,30 @@ public:
     [[nodiscard]] constexpr explicit operator bool() const noexcept { return has_value(); }
 
     [[nodiscard]] constexpr
-    auto operator*() & noexcept -> S& requires(not void_success) { return mObject; }
+    auto operator*() & noexcept -> S& requires(not void_success)
+    { assert_object(has_value(), "expected::operator* called without a value"); return mObject; }
     [[nodiscard]] constexpr
-    auto operator*() const& noexcept -> S const& requires(not void_success) { return mObject; }
+    auto operator*() const& noexcept -> S const& requires(not void_success)
+    { assert_object(has_value(), "expected::operator* called without a value"); return mObject; }
     [[nodiscard]] constexpr
-    auto operator*() && noexcept -> S&& requires(not void_success) { return std::move(mObject); }
+    auto operator*() && noexcept -> S&& requires(not void_success)
+    {
+        assert_object(has_value(), "expected::operator* called without a value");
+        return std::move(mObject);
+    }
     [[nodiscard]] constexpr
     auto operator*() const&& noexcept -> S const&& requires(not void_success)
-    { return std::move(mObject); }
+    {
+        assert_object(has_value(), "expected::operator* called without a value");
+        return std::move(mObject);
+    }
 
     [[nodiscard]] constexpr
-    auto operator->() noexcept -> S* requires(not void_success) { return &mObject; }
+    auto operator->() noexcept -> S* requires(not void_success)
+    { assert_object(has_value(), "expected::operator-> called without a value"); return &mObject; }
     [[nodiscard]] constexpr
-    auto operator->() const noexcept -> S const* requires(not void_success) { return &mObject; }
+    auto operator->() const noexcept -> S const* requires(not void_success)
+    { assert_object(has_value(), "expected::operator-> called without a value"); return &mObject; }
 
     constexpr auto value() const& -> void { check_object(); }
     constexpr auto value() & -> void { check_object(); }
@@ -210,11 +241,25 @@ public:
     auto value_or(U&& defval) && -> S requires(not void_success)
     { return bool{*this} ? std::move(**this) : static_cast<S>(std::forward<U>(defval)); }
 
-    [[nodiscard]] constexpr auto error() & noexcept -> Er& { return mError; }
-    [[nodiscard]] constexpr auto error() const& noexcept -> const Er& { return mError; }
-    [[nodiscard]] constexpr auto error() && noexcept -> Er&& { return std::move(mError); }
     [[nodiscard]] constexpr
-    auto error() const&& noexcept -> const Er&& { return std::move(mError); }
+    auto error() & noexcept -> Er&
+    { assert_object(not has_value(), "expected::error called without an error"); return mError; }
+    [[nodiscard]] constexpr
+    auto error() const& noexcept -> const Er&
+    { assert_object(not has_value(), "expected::error called without an error"); return mError; }
+    [[nodiscard]] constexpr
+    auto error() && noexcept -> Er&&
+    {
+        assert_object(not has_value(), "expected::error called without an error");
+        return std::move(mError);
+    }
+    [[nodiscard]] constexpr
+    auto error() const&& noexcept -> const Er&&
+    {
+        assert_object(not has_value(), "expected::error called without an error");
+        return std::move(mError);
+    }
+#undef assert_object
 
     template<typename F> [[nodiscard]] constexpr
     auto and_then(F&& fn) &
