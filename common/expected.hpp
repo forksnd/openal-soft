@@ -101,10 +101,10 @@ class [[nodiscard]] expected {
 
     using S = std::conditional_t<void_success, monostate, Ty>;
     union {
-        S mObject{};
+        S mObject;
         Er mError;
     };
-    bool mHasObject{true};
+    bool mHasObject;
 
     /* NOLINTBEGIN(cppcoreguidelines-pro-type-union-access) */
     auto check_object() const -> void { if(not mHasObject) throw bad_expected_access<Er>{mError}; }
@@ -127,13 +127,17 @@ class [[nodiscard]] expected {
     using in_place_inv_ = detail_::in_place_inv_;
 
     template<typename F> requires(not void_success) explicit constexpr
-    expected(in_place_inv_, F&& f) : mObject{std::invoke(std::forward<F>(f))} { }
+    expected(in_place_inv_, F&& f) : mObject{std::invoke(std::forward<F>(f))}, mHasObject{true}
+    { }
     template<typename F> requires(void_success) explicit constexpr
-    expected(in_place_inv_, F&& f) { std::invoke(std::forward<F>(f)); }
+    expected(in_place_inv_, F&& f) : mObject{}, mHasObject{true}
+    { std::invoke(std::forward<F>(f)); }
 
 public:
-    constexpr expected() noexcept(std::is_nothrow_default_constructible_v<S>) = default;
-    constexpr expected(const expected &rhs)
+    constexpr
+    expected() noexcept(std::is_nothrow_default_constructible_v<S>) : mObject{}, mHasObject{true}
+    { }
+    constexpr expected(expected const &rhs)
         noexcept(std::is_nothrow_copy_constructible_v<S>
             and std::is_nothrow_copy_constructible_v<Er>)
         requires(std::is_trivially_copy_constructible_v<S>
@@ -145,6 +149,26 @@ public:
         requires(std::is_trivially_move_constructible_v<S>
             and std::is_trivially_move_constructible_v<Er>)
         = default;
+    constexpr expected(expected const &rhs)
+        noexcept(std::is_nothrow_copy_constructible_v<S>
+            and std::is_nothrow_copy_constructible_v<Er>)
+        requires(not std::is_trivially_copy_constructible_v<S>
+            or not std::is_trivially_copy_constructible_v<Er>)
+        : mHasObject{rhs.mHasObject}
+    {
+        if(rhs.mHasObject) std::construct_at(&mObject, rhs.mObject);
+        else std::construct_at(&mError, rhs.mError);
+    }
+    constexpr expected(expected&& rhs)
+        noexcept(std::is_nothrow_move_constructible_v<S>
+            and std::is_nothrow_move_constructible_v<Er>)
+        requires(not std::is_trivially_move_constructible_v<S>
+            or not std::is_trivially_move_constructible_v<Er>)
+        : mHasObject{rhs.mHasObject}
+    {
+        if(rhs.mHasObject) std::construct_at(&mObject, std::move(rhs.mObject));
+        else std::construct_at(&mError, std::move(rhs.mError));
+    }
     constexpr ~expected()
     {
         if(mHasObject) std::destroy_at(&mObject);
@@ -157,15 +181,17 @@ public:
         requires(not std::is_same_v<std::remove_cvref_t<U>, std::in_place_t>
             and not std::is_same_v<expected, std::remove_cvref_t<U>>
             and std::is_constructible_v<Ty, U>)
-        constexpr
-    explicit(!std::is_convertible_v<U, Ty>) expected(U&& v) : mObject{std::forward<U>(v)} { }
+        constexpr explicit(!std::is_convertible_v<U, Ty>)
+    expected(U&& v) : mObject{std::forward<U>(v)}, mHasObject{true} { }
 
     template<typename ...Args> requires(not void_success and std::is_constructible_v<Ty, Args...>)
         constexpr explicit
-    expected(std::in_place_t, Args&& ...args) : mObject{std::forward<Args>(args)...} { }
+    expected(std::in_place_t, Args&& ...args)
+        : mObject{std::forward<Args>(args)...}, mHasObject{true}
+    { }
 
     constexpr explicit
-    expected(std::in_place_t) noexcept requires(void_success) { }
+    expected(std::in_place_t) noexcept requires(void_success) : mObject{}, mHasObject{true} { }
 
     /* Error constructors */
     template<typename U> requires(std::is_constructible_v<Er, const U&>) constexpr
