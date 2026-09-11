@@ -53,8 +53,10 @@
 #include <SLES/OpenSLES_AndroidConfiguration.h>
 
 #if HAVE_CXXMODULES
+import format.zsv;
 import logging;
 #else
+#include "alformatzsv.hpp"
 #include "core/logging.h"
 #endif
 
@@ -939,7 +941,7 @@ auto OSLBackendFactory::init() -> bool
             sles_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", sles_lib.view(), libresult.error());
+            WARN("Failed to load {}: {}", sles_lib, libresult.error());
             return false;
         }
 
@@ -948,7 +950,7 @@ auto OSLBackendFactory::init() -> bool
         {
             return GetSymbolAddress<T>(sles_handle, name)
                 .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name.view(), err);
+                    WARN("Failed to load symbol {}: {}", name, err);
                     return false;
                 })
                 .transform([&func](T *addr) { func = addr; })

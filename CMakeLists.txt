@@ -774,12 +774,14 @@ if(HAVE_CXXMODULES)
     list(APPEND COMMON_MODS
         alsoft-modules/gsl.cppm
         common/alformattypes.cppm
+        common/alformatzsv.cppm
         common/hann_window.cppm
         common/phase_shifter.cppm
     )
 else()
     list(APPEND COMMON_HDRS
         common/alformattypes.hpp
+        common/alformatzsv.hpp
         common/hann_window.hpp
         common/phase_shifter.hpp
     )

@@ -56,9 +56,11 @@
 #include <mutex>
 
 #if HAVE_CXXMODULES
+import format.zsv;
 import gsl;
 import logging;
 #else
+#include "alformatzsv.hpp"
 #include "gsl/gsl"
 #include "logging.h"
 #endif
@@ -124,7 +126,7 @@ auto HasDBus() -> bool
             dbus_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", dbus_lib.view(), libresult.error());
+            WARN("Failed to load {}: {}", dbus_lib, libresult.error());
             return;
         }
 
@@ -133,7 +135,7 @@ auto HasDBus() -> bool
         {
             return GetSymbolAddress<T>(dbus_handle, name)
                 .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name.view(), err);
+                    WARN("Failed to load symbol {}: {}", name, err);
                     return false;
                 })
                 .transform([&func](T *addr) { func = addr; })

@@ -19,7 +19,6 @@
 #define ZSTRING_VIEW_INCLUDED
 
 #include <cstddef>
-#include <ostream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -409,13 +408,6 @@ namespace al {
         return lhs.view() == rhs.view();
     }
 
-
-    template<typename CharT, typename Traits>
-    auto operator<<(std::basic_ostream<CharT, Traits>& os,
-        basic_zstring_view<CharT, Traits> v) -> decltype(auto)
-    {
-        return os << v.view();
-    }
 
     inline namespace literals
     {

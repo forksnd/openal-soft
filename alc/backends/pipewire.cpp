@@ -137,10 +137,12 @@ DIAGNOSTIC_POP;
 
 #if HAVE_CXXMODULES
 import format.types;
+import format.zsv;
 import gsl;
 import logging;
 #else
 #include "alformattypes.hpp"
+#include "alformatzsv.hpp"
 #include "core/logging.h"
 #include "gsl/gsl"
 #endif
@@ -320,7 +322,7 @@ auto pwire_load() -> bool
         pwire_handle = libresult.value();
     else
     {
-        WARN("Failed to load {}: {}", pwire_lib.view(), libresult.error());
+        WARN("Failed to load {}: {}", pwire_lib, libresult.error());
         return false;
     }
 
@@ -328,7 +330,7 @@ auto pwire_load() -> bool
     {
         return GetSymbolAddress<T>(pwire_handle, name)
             .transform_error([name](std::string_view const err) {
-                WARN("Failed to load symbol {}: {}", name.view(), err);
+                WARN("Failed to load symbol {}: {}", name, err);
                 return false;
             })
             .transform([&func](T *addr) { func = addr; })

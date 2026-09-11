@@ -85,8 +85,10 @@ DEFINE_GUID(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, 0x00000003, 0x0000, 0x0010, 0x80, 0
 #endif
 
 #if HAVE_CXXMODULES
+import format.zsv;
 import logging;
 #else
+#include "alformatzsv.hpp"
 #include "core/logging.h"
 #endif
 
@@ -754,7 +756,7 @@ auto DSoundBackendFactory::init() -> bool
             ds_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", dsound_lib.view(), libresult.error());
+            WARN("Failed to load {}: {}", dsound_lib, libresult.error());
             return false;
         }
 
@@ -763,7 +765,7 @@ auto DSoundBackendFactory::init() -> bool
         {
             return GetSymbolAddress<T>(ds_handle, name)
                 .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name.view(), err);
+                    WARN("Failed to load symbol {}: {}", name, err);
                     return false;
                 })
                 .transform([&func](T *addr) { func = addr; })

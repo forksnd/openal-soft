@@ -50,8 +50,10 @@
 #include <alsa/asoundlib.h>
 
 #if HAVE_CXXMODULES
+import format.zsv;
 import logging;
 #else
+#include "alformatzsv.hpp"
 #include "core/logging.h"
 #endif
 
@@ -1172,7 +1174,7 @@ auto AlsaBackendFactory::init() -> bool
             alsa_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", alsa_lib.view(), libresult.error());
+            WARN("Failed to load {}: {}", alsa_lib, libresult.error());
             return false;
         }
 
@@ -1181,7 +1183,7 @@ auto AlsaBackendFactory::init() -> bool
         {
             return GetSymbolAddress<T>(alsa_handle, name)
                 .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name.view(), err);
+                    WARN("Failed to load symbol {}: {}", name, err);
                     return false;
                 })
                 .transform([&func](T *addr) { func = addr; })

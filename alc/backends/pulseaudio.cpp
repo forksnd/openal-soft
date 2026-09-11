@@ -53,9 +53,11 @@
 #include <pulse/pulseaudio.h>
 
 #if HAVE_CXXMODULES
+import format.zsv;
 import gsl;
 import logging;
 #else
+#include "alformatzsv.hpp"
 #include "core/logging.h"
 #include "gsl/gsl"
 #endif
@@ -1471,7 +1473,7 @@ auto PulseBackendFactory::init() -> bool
             pulse_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", pulse_lib.view(), libresult.error());
+            WARN("Failed to load {}: {}", pulse_lib, libresult.error());
             return false;
         }
 
@@ -1480,7 +1482,7 @@ auto PulseBackendFactory::init() -> bool
         {
             return GetSymbolAddress<T>(pulse_handle, name)
                 .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name.view(), err);
+                    WARN("Failed to load symbol {}: {}", name, err);
                     return false;
                 })
                 .transform([&func](T *addr) { func = addr; })
