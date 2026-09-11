@@ -1,24 +1,26 @@
 module;
 
+#include <type_traits>
+
 #include "alformat.hpp"
 #include "zstring_view.hpp"
 
 export module format.zsv;
 
 namespace {
-    template<typename>
-    struct is_zstring_view_ : std::false_type { };
+    template<typename T, template<typename...> typename U>
+    inline constexpr auto is_instance_of_v = false;
 
-    template<typename CharT, typename TraitsT>
-    struct is_zstring_view_<al::basic_zstring_view<CharT, TraitsT>> : std::true_type { };
+    template<template<typename...> typename U, typename... Vs>
+    inline constexpr auto is_instance_of_v<U<Vs...>, U> = true;
 
     template<typename T>
-    inline auto constexpr is_zstring_view_v = is_zstring_view_<T>::value;
+    concept zstring_view_type = is_instance_of_v<std::remove_cvref_t<T>, al::basic_zstring_view>;
 }
 
 export {
 
-template<typename T, typename CharT> requires(is_zstring_view_v<T>)
+template<zstring_view_type T, typename CharT>
 struct al::formatter<T, CharT> : formatter<typename T::underlying_type, CharT> {
     using fmttype_t = typename T::underlying_type;
 
