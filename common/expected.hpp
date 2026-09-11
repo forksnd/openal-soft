@@ -93,6 +93,7 @@ inline constexpr auto unexpect = unexpect_t{};
 namespace detail_ {
     /* Internal tag type to construct an expected with an invocable. */
     struct in_place_inv_ { };
+    struct unexpect_inv_ { };
 }
 
 template<typename Ty, typename Er>
@@ -125,6 +126,7 @@ class [[nodiscard]] expected {
     template<typename, typename> friend class expected;
 
     using in_place_inv_ = detail_::in_place_inv_;
+    using unexpect_inv_ = detail_::unexpect_inv_;
 
     template<typename F> requires(not void_success) explicit constexpr
     expected(in_place_inv_, F&& f) : mObject{std::invoke(std::forward<F>(f))}, mHasObject{true}
@@ -132,6 +134,9 @@ class [[nodiscard]] expected {
     template<typename F> requires(void_success) explicit constexpr
     expected(in_place_inv_, F&& f) : mObject{}, mHasObject{true}
     { std::invoke(std::forward<F>(f)); }
+    template<typename F> explicit constexpr
+    expected(unexpect_inv_, F&& f) : mError{std::invoke(std::forward<F>(f))}, mHasObject{false}
+    { }
 
 public:
     constexpr
@@ -379,6 +384,98 @@ public:
                     [&]{ return std::invoke(std::forward<F>(fn), std::move(mObject)); }};
         }
         return ret_t{unexpect, std::move(mError)};
+    }
+
+    template<typename F> [[nodiscard]] constexpr
+    auto or_else(F&& fn) &
+    {
+        using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Er&>>;
+        if(has_value())
+            return ret_t{std::in_place, mObject};
+        return std::invoke(std::forward<F>(fn), mError);
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto or_else(F&& fn) const&
+    {
+        using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Er const&>>;
+        if(has_value())
+            return ret_t{std::in_place, mObject};
+        return std::invoke(std::forward<F>(fn), mError);
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto or_else(F&& fn) &&
+    {
+        using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Er&&>>;
+        if(has_value())
+            return ret_t{std::in_place, std::move(mObject)};
+        return std::invoke(std::forward<F>(fn), std::move(mError));
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto or_else(F&& fn) const&&
+    {
+        using ret_t = std::remove_cvref_t<std::invoke_result_t<F&&, Er const&&>>;
+        if(has_value())
+            return ret_t{std::in_place, std::move(mObject)};
+        return std::invoke(std::forward<F>(fn), std::move(mError));
+    }
+
+    template<typename F> [[nodiscard]] constexpr
+    auto transform_error(F&& fn) &
+    {
+        using Er2 = std::remove_cv_t<std::invoke_result_t<F&&, Er&>>;
+        using ret_t = expected<Ty, Er2>;
+        if(has_value())
+        {
+            if constexpr(void_success)
+                return ret_t{std::in_place};
+            else
+                return ret_t{std::in_place, mObject};
+        }
+        return ret_t{unexpect_inv_{}, [&]{ return std::invoke(std::forward<F>(fn), mError); }};
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto transform_error(F&& fn) const&
+    {
+        using Er2 = std::remove_cv_t<std::invoke_result_t<F&&, Er const&>>;
+        using ret_t = expected<Ty, Er2>;
+        if(has_value())
+        {
+            if constexpr(void_success)
+                return ret_t{std::in_place};
+            else
+                return ret_t{std::in_place, mObject};
+        }
+        return ret_t{unexpect_inv_{}, [&]{ return std::invoke(std::forward<F>(fn), mError); }};
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto transform_error(F&& fn) &&
+    {
+        using Er2 = std::remove_cv_t<std::invoke_result_t<F&&, Er&&>>;
+        using ret_t = expected<Ty, Er2>;
+        if(has_value())
+        {
+            if constexpr(void_success)
+                return ret_t{std::in_place};
+            else
+                return ret_t{std::in_place, std::move(mObject)};
+        }
+        return ret_t{unexpect_inv_{},
+            [&]{ return std::invoke(std::forward<F>(fn), std::move(mError)); }};
+    }
+    template<typename F> [[nodiscard]] constexpr
+    auto transform_error(F&& fn) const&&
+    {
+        using Er2 = std::remove_cv_t<std::invoke_result_t<F&&, Er const&&>>;
+        using ret_t = expected<Ty, Er2>;
+        if(has_value())
+        {
+            if constexpr(void_success)
+                return ret_t{std::in_place};
+            else
+                return ret_t{std::in_place, std::move(mObject)};
+        }
+        return ret_t{unexpect_inv_{},
+            [&]{ return std::invoke(std::forward<F>(fn), std::move(mError)); }};
     }
     /* NOLINTEND(cppcoreguidelines-pro-type-union-access) */
 
