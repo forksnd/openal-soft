@@ -58,6 +58,7 @@
 #include "opthelpers.h"
 #include "pragmadefs.h"
 #include "ringbuffer.h"
+#include "zstring_view.hpp"
 
 /* Ignore warnings caused by PipeWire headers (lots in standard C++ mode). GCC
  * doesn't support ignoring -Weverything, so we have the list the individual
@@ -314,21 +315,21 @@ auto pwire_load() -> bool
     if(pwire_handle)
         return true;
 
-    auto *const pwire_lib = gsl::czstring{PWIRE_LIB};
+    auto constexpr pwire_lib = al::zstring_view{PWIRE_LIB};
     if(auto const libresult = LoadLib(pwire_lib))
         pwire_handle = libresult.value();
     else
     {
-        WARN("Failed to load {}: {}", pwire_lib, libresult.error());
+        WARN("Failed to load {}: {}", pwire_lib.view(), libresult.error());
         return false;
     }
 
-    static constexpr auto load_sym = []<typename T>(T *&func, gsl::czstring const name) -> bool
+    static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name) -> bool
     {
         auto const funcresult = GetSymbolAddress<T>(pwire_handle, name);
         if(!funcresult)
         {
-            WARN("Failed to load symbol {}: {}", name, funcresult.error());
+            WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
             return false;
         }
         func = funcresult.value();

@@ -48,6 +48,7 @@
 #include "dynload.h"
 #include "opthelpers.h"
 #include "strutils.hpp"
+#include "zstring_view.hpp"
 
 #include <pulse/pulseaudio.h>
 
@@ -1465,21 +1466,22 @@ auto PulseBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!pulse_handle)
     {
-        auto *const pulse_lib = gsl::czstring{PULSE_LIB};
+        auto constexpr pulse_lib = al::zstring_view{PULSE_LIB};
         if(auto const libresult = LoadLib(pulse_lib))
             pulse_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", pulse_lib, libresult.error());
+            WARN("Failed to load {}: {}", pulse_lib.view(), libresult.error());
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, gsl::czstring const name) -> bool
+        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
+            -> bool
         {
             auto const funcresult = GetSymbolAddress<T>(pulse_handle, name);
             if(!funcresult)
             {
-                WARN("Failed to load symbol {}: {}", name, funcresult.error());
+                WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
                 return false;
             }
             func = funcresult.value();

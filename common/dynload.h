@@ -12,15 +12,16 @@
 #include "gsl/gsl"
 
 #include "dlopennote.h"
+#include "zstring_view.hpp"
 
 [[nodiscard]]
-auto LoadLib(gsl::czstring name) -> al::expected<void*, std::string>;
+auto LoadLib(al::zstring_view name) -> al::expected<void*, std::string>;
 void CloseLib(void *handle);
 [[nodiscard]]
-auto GetSymbol_(void *handle, gsl::czstring name) -> al::expected<void*, std::string>;
+auto GetSymbol_(void *handle, al::zstring_view name) -> al::expected<void*, std::string>;
 
 template<typename T> [[nodiscard]]
-auto GetSymbolAddress(void *const handle, gsl::czstring const name)
+auto GetSymbolAddress(void *const handle, al::zstring_view const name)
     -> al::expected<T*, std::string>
 {
     return GetSymbol_(handle, name)

@@ -46,6 +46,7 @@
 #include "gsl/gsl"
 #include "opthelpers.h"
 #include "ringbuffer.h"
+#include "zstring_view.hpp"
 
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
@@ -933,21 +934,22 @@ auto OSLBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!sles_handle)
     {
-        auto *const sles_lib = gsl::czstring{SLES_LIB};
+        auto constexpr sles_lib = al::zstring_view{SLES_LIB};
         if(auto const libresult = LoadLib(sles_lib))
             sles_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", sles_lib, libresult.error());
+            WARN("Failed to load {}: {}", sles_lib.view(), libresult.error());
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, gsl::czstring const name) -> bool
+        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
+            -> bool
         {
             auto const funcresult = GetSymbolAddress<T>(sles_handle, name);
             if(!funcresult)
             {
-                WARN("Failed to load symbol {}: {}", name, funcresult.error());
+                WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
                 return false;
             }
             func = funcresult.value();

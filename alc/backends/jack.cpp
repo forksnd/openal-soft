@@ -41,6 +41,7 @@
 #include "gsl/gsl"
 #include "opthelpers.h"
 #include "ringbuffer.h"
+#include "zstring_view.hpp"
 
 #include <jack/jack.h>
 #include <jack/ringbuffer.h>
@@ -134,21 +135,22 @@ auto jack_load() -> bool
 #if HAVE_DYNLOAD
     if(!jack_handle)
     {
-        const char *jack_lib = JACK_LIB;
+        auto constexpr jack_lib = al::zstring_view{JACK_LIB};
         if(auto libresult = LoadLib(jack_lib))
             jack_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", jack_lib, libresult.error());
+            WARN("Failed to load {}: {}", jack_lib.view(), libresult.error());
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, gsl::czstring const name) -> bool
+        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
+            -> bool
         {
             auto funcresult = GetSymbolAddress<T>(jack_handle, name);
             if(!funcresult)
             {
-                WARN("Failed to load symbol {}: {}", name, funcresult.error());
+                WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
                 return false;
             }
             func = funcresult.value();

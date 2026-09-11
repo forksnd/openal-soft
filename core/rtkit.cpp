@@ -48,7 +48,7 @@
 #endif
 
 #include "dynload.h"
-#include "gsl/gsl"
+#include "zstring_view.hpp"
 
 
 #if HAVE_DYNLOAD
@@ -56,8 +56,10 @@
 #include <mutex>
 
 #if HAVE_CXXMODULES
+import gsl;
 import logging;
 #else
+#include "gsl/gsl"
 #include "logging.h"
 #endif
 
@@ -117,21 +119,22 @@ auto HasDBus() -> bool
     static constinit auto init_dbus = std::once_flag{};
     std::call_once(init_dbus, []
     {
-        auto *const dbus_lib = gsl::czstring{DBUS_LIB};
+        auto constexpr dbus_lib = al::zstring_view{DBUS_LIB};
         if(auto const libresult = LoadLib(dbus_lib))
             dbus_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", dbus_lib, libresult.error());
+            WARN("Failed to load {}: {}", dbus_lib.view(), libresult.error());
             return;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, gsl::czstring const name) -> bool
+        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
+            -> bool
         {
             auto const funcresult = GetSymbolAddress<T>(dbus_handle, name);
             if(!funcresult)
             {
-                WARN("Failed to load function {}: {}", name, funcresult.error());
+                WARN("Failed to load function {}: {}", name.view(), funcresult.error());
                 return false;
             }
             func = funcresult.value();

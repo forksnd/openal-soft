@@ -49,6 +49,7 @@
 #include "gsl/gsl"
 #include "ringbuffer.h"
 #include "strutils.hpp"
+#include "zstring_view.hpp"
 
 /* MinGW-w64 needs this for some unknown reason now. */
 using LPCWAVEFORMATEX = const WAVEFORMATEX*;
@@ -748,20 +749,22 @@ auto DSoundBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!ds_handle)
     {
-        if(auto libresult = LoadLib("dsound.dll"))
+        auto constexpr dsound_lib = al::zstring_view{"dsound.dll"};
+        if(auto libresult = LoadLib(dsound_lib); libresult.has_value())
             ds_handle = libresult.value();
         else
         {
-            WARN("Failed to load dsound.dll: {}", libresult.error());
+            WARN("Failed to load {}: {}", dsound_lib.view(), libresult.error());
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, gsl::czstring const name) -> bool
+        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
+            -> bool
         {
             auto const funcresult = GetSymbolAddress<T>(ds_handle, name);
             if(!funcresult)
             {
-                WARN("Failed to load symbol {}: {}", name, funcresult.error());
+                WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
                 return false;
             }
             func = funcresult.value();

@@ -12,7 +12,7 @@
 #include "gsl/gsl"
 #include "strutils.hpp"
 
-auto LoadLib(gsl::czstring const name) -> al::expected<void*, std::string>
+auto LoadLib(al::zstring_view const name) -> al::expected<void*, std::string>
 {
     if(auto const res = LoadLibraryW(utf8_to_wstr(name).c_str())) [[likely]]
         return res;
@@ -33,9 +33,10 @@ auto LoadLib(gsl::czstring const name) -> al::expected<void*, std::string>
 void CloseLib(void *const handle)
 { FreeLibrary(static_cast<HMODULE>(handle)); }
 
-auto GetSymbol_(void *const handle, gsl::czstring const name) -> al::expected<void*, std::string>
+auto GetSymbol_(void *const handle, al::zstring_view const name)
+    -> al::expected<void*, std::string>
 {
-    if(auto const sym = GetProcAddress(static_cast<HMODULE>(handle), name)) [[likely]]
+    if(auto const sym = GetProcAddress(static_cast<HMODULE>(handle), name.c_str())) [[likely]]
     {
         /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
         return reinterpret_cast<void*>(sym);
@@ -58,9 +59,9 @@ auto GetSymbol_(void *const handle, gsl::czstring const name) -> al::expected<vo
 
 #include <dlfcn.h>
 
-auto LoadLib(gsl::czstring const name) -> al::expected<void*, std::string>
+auto LoadLib(al::zstring_view const name) -> al::expected<void*, std::string>
 {
-    if(auto *const handle = dlopen(name, RTLD_NOW))
+    if(auto *const handle = dlopen(name.c_str(), RTLD_NOW))
         return handle;
 
     if(auto *const err = dlerror())
@@ -71,9 +72,10 @@ auto LoadLib(gsl::czstring const name) -> al::expected<void*, std::string>
 void CloseLib(void *const handle)
 { dlclose(handle); }
 
-auto GetSymbol_(void *const handle, gsl::czstring const name) -> al::expected<void*, std::string>
+auto GetSymbol_(void *const handle, al::zstring_view const name)
+    -> al::expected<void*, std::string>
 {
-    if(auto *const sym = dlsym(handle, name))
+    if(auto *const sym = dlsym(handle, name.c_str()))
         return sym;
 
     if(auto *const err = dlerror())

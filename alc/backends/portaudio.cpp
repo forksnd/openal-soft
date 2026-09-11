@@ -31,6 +31,7 @@
 #include "core/device.h"
 #include "dynload.h"
 #include "ringbuffer.h"
+#include "zstring_view.hpp"
 
 #include <portaudio.h>
 
@@ -445,21 +446,22 @@ auto PortBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!pa_handle)
     {
-        auto *const pa_lib = gsl::czstring{PA_LIB};
+        auto constexpr pa_lib = al::zstring_view{PA_LIB};
         if(auto const libresult = LoadLib(pa_lib))
             pa_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", pa_lib, libresult.error());
+            WARN("Failed to load {}: {}", pa_lib.view(), libresult.error());
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, gsl::czstring const name) -> bool
+        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
+            -> bool
         {
             auto const funcresult = GetSymbolAddress<T>(pa_handle, name);
             if(!funcresult)
             {
-                WARN("Failed to load symbol {}: {}", name, funcresult.error());
+                WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
                 return false;
             }
             func = funcresult.value();

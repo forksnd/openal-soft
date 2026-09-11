@@ -45,6 +45,7 @@
 #include "dynload.h"
 #include "gsl/gsl"
 #include "ringbuffer.h"
+#include "zstring_view.hpp"
 
 #include <alsa/asoundlib.h>
 
@@ -1166,21 +1167,22 @@ auto AlsaBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!alsa_handle)
     {
-        auto *const alsa_lib = gsl::czstring{ALSA_LIB};
+        auto constexpr alsa_lib = al::zstring_view{ALSA_LIB};
         if(auto const libresult = LoadLib(alsa_lib))
             alsa_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", alsa_lib, libresult.error());
+            WARN("Failed to load {}: {}", alsa_lib.view(), libresult.error());
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, gsl::czstring const name) -> bool
+        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
+            -> bool
         {
             auto const funcresult = GetSymbolAddress<T>(alsa_handle, name);
             if(!funcresult)
             {
-                WARN("Failed to load symbol {}: {}", name, funcresult.error());
+                WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
                 return false;
             }
             func = funcresult.value();
