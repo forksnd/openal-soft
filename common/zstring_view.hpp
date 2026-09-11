@@ -20,8 +20,11 @@
 
 #include <cstddef>
 #include <ostream>
+#include <string>
 #include <string_view>
 #include <type_traits>
+
+#include "opthelpers.h"
 
 namespace al {
 
@@ -55,15 +58,17 @@ namespace al {
         static constexpr auto npos = underlying_type::npos;
 
         constexpr basic_zstring_view() noexcept = default;
-        constexpr basic_zstring_view(const basic_zstring_view& other) noexcept = default;
-        explicit(false) constexpr basic_zstring_view(const CharT* s) : m_view{s} {}
+        constexpr basic_zstring_view(basic_zstring_view const &other) noexcept = default;
+        explicit(false) constexpr basic_zstring_view(CharT const *s LIFETIMEBOUND) : m_view{s} { }
+        explicit(false) constexpr
+        basic_zstring_view(std::string const &s LIFETIMEBOUND) : m_view{s} { }
 
         // Needed as a workaround for gcc bug #61648
         // Allows non-friend string literal operators the ability to indirectly call the private constructor
         // Safe calling of this requires *certainty* that s[count] is a null character
         // Has to be public thusly, but don't call this
         [[nodiscard]] static constexpr
-        auto INTERNAL_unsafe_make_from_string_range(const CharT* s, size_type count)
+        auto INTERNAL_unsafe_make_from_string_range(CharT const *s LIFETIMEBOUND, size_type count)
             -> basic_zstring_view
         {
             return {s, count};
