@@ -1776,7 +1776,11 @@ void VideoState::updateVideo(SDL_Window *screen, SDL_Renderer *renderer, bool re
                     frame_height = gsl::narrow_cast<int>(std::lround(frame_height / aspect_ratio));
             }
             if(SDL_SetWindowSize(screen, frame_width, frame_height))
+            {
                 SDL_SyncWindow(screen);
+                if(SDL_SetWindowPosition(screen, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED))
+                    SDL_SyncWindow(screen);
+            }
             SDL_SetRenderLogicalPresentation(renderer, frame_width, frame_height,
                 SDL_LOGICAL_PRESENTATION_LETTERBOX);
         }
@@ -2190,6 +2194,7 @@ struct Application {
             fmt::println(std::cerr, "SDL: could not set video mode - exiting");
             return false;
         }
+        SDL_SetWindowPosition(mWindow, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         SDL_SetWindowSurfaceVSync(mWindow, 1);
 
         /* Make a renderer to handle the texture image surface and rendering. */
