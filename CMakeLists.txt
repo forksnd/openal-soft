@@ -758,6 +758,7 @@ set(COMMON_HDRS
     common/strutils.hpp
     common/vecmat.h
     common/vector.h
+    common/zstring_view.hpp
     gsl/include/gsl/algorithm
     gsl/include/gsl/assert
     gsl/include/gsl/byte
