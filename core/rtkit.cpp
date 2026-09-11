@@ -66,24 +66,24 @@ import logging;
 namespace {
 
 #define DBUS_FUNCTIONS(MAGIC) \
-MAGIC(dbus_error_init) \
-MAGIC(dbus_error_free) \
-MAGIC(dbus_bus_get) \
-MAGIC(dbus_connection_set_exit_on_disconnect) \
-MAGIC(dbus_connection_unref) \
-MAGIC(dbus_connection_send_with_reply_and_block) \
-MAGIC(dbus_message_unref) \
-MAGIC(dbus_message_new_method_call) \
-MAGIC(dbus_message_append_args) \
-MAGIC(dbus_message_iter_init) \
-MAGIC(dbus_message_iter_next) \
-MAGIC(dbus_message_iter_recurse) \
-MAGIC(dbus_message_iter_get_arg_type) \
-MAGIC(dbus_message_iter_get_basic) \
-MAGIC(dbus_set_error_from_message)
+MAGIC(dbus_error_init); \
+MAGIC(dbus_error_free); \
+MAGIC(dbus_bus_get); \
+MAGIC(dbus_connection_set_exit_on_disconnect); \
+MAGIC(dbus_connection_unref); \
+MAGIC(dbus_connection_send_with_reply_and_block); \
+MAGIC(dbus_message_unref); \
+MAGIC(dbus_message_new_method_call); \
+MAGIC(dbus_message_append_args); \
+MAGIC(dbus_message_iter_init); \
+MAGIC(dbus_message_iter_next); \
+MAGIC(dbus_message_iter_recurse); \
+MAGIC(dbus_message_iter_get_arg_type); \
+MAGIC(dbus_message_iter_get_basic); \
+MAGIC(dbus_set_error_from_message);
 
 void *dbus_handle{};
-#define DECL_FUNC(x) decltype(x) *p##x{};
+#define DECL_FUNC(x) decltype(x) *p##x{}
 DBUS_FUNCTIONS(DECL_FUNC)
 #undef DECL_FUNC
 
@@ -131,17 +131,16 @@ auto HasDBus() -> bool
         static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
             -> bool
         {
-            auto const funcresult = GetSymbolAddress<T>(dbus_handle, name);
-            if(!funcresult)
-            {
-                WARN("Failed to load function {}: {}", name.view(), funcresult.error());
-                return false;
-            }
-            func = funcresult.value();
-            return true;
-        };
+            return GetSymbolAddress<T>(dbus_handle, name)
+                .transform_error([name](std::string_view const err) {
+                    WARN("Failed to load symbol {}: {}", name.view(), err);
+                    return false;
+                })
+                .transform([&func](T *addr) { func = addr; })
+                .has_value();
+            };
         auto ok = true;
-#define LOAD_FUNC(f) ok &= load_sym(p##f, #f);
+#define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
         DBUS_FUNCTIONS(LOAD_FUNC)
 #undef LOAD_FUNC
         if(!ok)

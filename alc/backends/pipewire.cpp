@@ -257,46 +257,46 @@ auto check_version(gsl::czstring const version) -> bool
 
 #if HAVE_DYNLOAD
 #define PWIRE_FUNCS(MAGIC)                                                    \
-    MAGIC(pw_context_connect)                                                 \
-    MAGIC(pw_context_destroy)                                                 \
-    MAGIC(pw_context_new)                                                     \
-    MAGIC(pw_core_disconnect)                                                 \
-    MAGIC(pw_get_library_version)                                             \
-    MAGIC(pw_init)                                                            \
-    MAGIC(pw_properties_free)                                                 \
-    MAGIC(pw_properties_new)                                                  \
-    MAGIC(pw_properties_set)                                                  \
-    MAGIC(pw_properties_setf)                                                 \
-    MAGIC(pw_proxy_add_object_listener)                                       \
-    MAGIC(pw_proxy_destroy)                                                   \
-    MAGIC(pw_proxy_get_user_data)                                             \
-    MAGIC(pw_stream_add_listener)                                             \
-    MAGIC(pw_stream_connect)                                                  \
-    MAGIC(pw_stream_dequeue_buffer)                                           \
-    MAGIC(pw_stream_destroy)                                                  \
-    MAGIC(pw_stream_get_state)                                                \
-    MAGIC(pw_stream_new)                                                      \
-    MAGIC(pw_stream_queue_buffer)                                             \
-    MAGIC(pw_stream_set_active)                                               \
-    MAGIC(pw_thread_loop_new)                                                 \
-    MAGIC(pw_thread_loop_destroy)                                             \
-    MAGIC(pw_thread_loop_get_loop)                                            \
-    MAGIC(pw_thread_loop_start)                                               \
-    MAGIC(pw_thread_loop_stop)                                                \
-    MAGIC(pw_thread_loop_lock)                                                \
-    MAGIC(pw_thread_loop_wait)                                                \
-    MAGIC(pw_thread_loop_signal)                                              \
-    MAGIC(pw_thread_loop_unlock)
+    MAGIC(pw_context_connect);                                                \
+    MAGIC(pw_context_destroy);                                                \
+    MAGIC(pw_context_new);                                                    \
+    MAGIC(pw_core_disconnect);                                                \
+    MAGIC(pw_get_library_version);                                            \
+    MAGIC(pw_init);                                                           \
+    MAGIC(pw_properties_free);                                                \
+    MAGIC(pw_properties_new);                                                 \
+    MAGIC(pw_properties_set);                                                 \
+    MAGIC(pw_properties_setf);                                                \
+    MAGIC(pw_proxy_add_object_listener);                                      \
+    MAGIC(pw_proxy_destroy);                                                  \
+    MAGIC(pw_proxy_get_user_data);                                            \
+    MAGIC(pw_stream_add_listener);                                            \
+    MAGIC(pw_stream_connect);                                                 \
+    MAGIC(pw_stream_dequeue_buffer);                                          \
+    MAGIC(pw_stream_destroy);                                                 \
+    MAGIC(pw_stream_get_state);                                               \
+    MAGIC(pw_stream_new);                                                     \
+    MAGIC(pw_stream_queue_buffer);                                            \
+    MAGIC(pw_stream_set_active);                                              \
+    MAGIC(pw_thread_loop_new);                                                \
+    MAGIC(pw_thread_loop_destroy);                                            \
+    MAGIC(pw_thread_loop_get_loop);                                           \
+    MAGIC(pw_thread_loop_start);                                              \
+    MAGIC(pw_thread_loop_stop);                                               \
+    MAGIC(pw_thread_loop_lock);                                               \
+    MAGIC(pw_thread_loop_wait);                                               \
+    MAGIC(pw_thread_loop_signal);                                             \
+    MAGIC(pw_thread_loop_unlock);
 #if PW_CHECK_VERSION(0,3,50)
 #define PWIRE_FUNCS2(MAGIC)                                                   \
-    MAGIC(pw_stream_get_time_n)
+    MAGIC(pw_stream_get_time_n);
 #else
 #define PWIRE_FUNCS2(MAGIC)                                                   \
-    MAGIC(pw_stream_get_time)
+    MAGIC(pw_stream_get_time);
 #endif
 
 void *pwire_handle;
-#define MAKE_FUNC(f) decltype(f) * p##f;
+#define MAKE_FUNC(f) decltype(f) * p##f
 PWIRE_FUNCS(MAKE_FUNC)
 PWIRE_FUNCS2(MAKE_FUNC)
 #undef MAKE_FUNC
@@ -326,17 +326,16 @@ auto pwire_load() -> bool
 
     static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name) -> bool
     {
-        auto const funcresult = GetSymbolAddress<T>(pwire_handle, name);
-        if(!funcresult)
-        {
-            WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
-            return false;
-        }
-        func = funcresult.value();
-        return true;
+        return GetSymbolAddress<T>(pwire_handle, name)
+            .transform_error([name](std::string_view const err) {
+                WARN("Failed to load symbol {}: {}", name.view(), err);
+                return false;
+            })
+            .transform([&func](T *addr) { func = addr; })
+            .has_value();
     };
     auto ok = true;
-#define LOAD_FUNC(f) ok &= load_sym(p##f, #f);
+#define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
     PWIRE_FUNCS(LOAD_FUNC)
     PWIRE_FUNCS2(LOAD_FUNC)
 #undef LOAD_FUNC

@@ -458,14 +458,13 @@ auto PortBackendFactory::init() -> bool
         static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
             -> bool
         {
-            auto const funcresult = GetSymbolAddress<T>(pa_handle, name);
-            if(!funcresult)
-            {
-                WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
-                return false;
-            }
-            func = funcresult.value();
-            return true;
+            return GetSymbolAddress<T>(pa_handle, name)
+                .transform_error([name](std::string_view const err) {
+                    WARN("Failed to load symbol {}: {}", name.view(), err);
+                    return false;
+                })
+                .transform([&func](T *addr) { func = addr; })
+                .has_value();
         };
         auto ok = true;
 #define LOAD_FUNC(f) ok &= load_sym(p##f, #f)

@@ -138,11 +138,11 @@ using namespace std::string_view_literals;
     MAGIC(snd_ctl_card_info_get_name);                                        \
     MAGIC(snd_ctl_card_info_get_id);                                          \
     MAGIC(snd_card_next);                                                     \
-    MAGIC(snd_config_update_free_global)
+    MAGIC(snd_config_update_free_global);
 
 void *alsa_handle;
 #define MAKE_FUNC(f) decltype(f) * p##f
-ALSA_FUNCS(MAKE_FUNC);
+ALSA_FUNCS(MAKE_FUNC)
 #undef MAKE_FUNC
 
 #ifndef IN_IDE_PARSER
@@ -1179,18 +1179,17 @@ auto AlsaBackendFactory::init() -> bool
         static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
             -> bool
         {
-            auto const funcresult = GetSymbolAddress<T>(alsa_handle, name);
-            if(!funcresult)
-            {
-                WARN("Failed to load symbol {}: {}", name.view(), funcresult.error());
-                return false;
-            }
-            func = funcresult.value();
-            return true;
+            return GetSymbolAddress<T>(alsa_handle, name)
+                .transform_error([name](std::string_view const err) {
+                    WARN("Failed to load symbol {}: {}", name.view(), err);
+                    return false;
+                })
+                .transform([&func](T *addr) { func = addr; })
+                .has_value();
         };
         auto ok = true;
 #define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
-        ALSA_FUNCS(LOAD_FUNC);
+        ALSA_FUNCS(LOAD_FUNC)
 #undef LOAD_FUNC
         if(!ok)
         {
